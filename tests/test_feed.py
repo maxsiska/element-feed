@@ -39,7 +39,7 @@ class FeedTests(unittest.TestCase):
     def test_enabled_feed_has_one_item_for_today(self):
         [item] = items(CONFIG)
         html = ET.fromstring('<div>' + item.findtext('description') + '</div>')
-        self.assertEqual(html.text.rstrip(), CONFIG["message"])
+        self.assertEqual(html.findtext("h6"), CONFIG["message"])
         self.assertIn("2026-10-15", item.findtext("title"))
         self.assertEqual(item.findtext("guid"), "2026-10-15")
         self.assertEqual(parsedate_to_datetime(item.findtext("pubDate")).date(), DAY)
@@ -71,7 +71,7 @@ class FeedTests(unittest.TestCase):
         [item] = items(config)
         html = ET.fromstring('<div>' + item.findtext('description') + '</div>')
         self.assertIsNone(html.find('.//a'))
-        self.assertEqual(html.text.rstrip(), config['message'])
+        self.assertEqual(html.findtext('h6'), config['message'])
         self.assertIsNone(item.find('link'))
         self.assertEqual(item.findtext('title'), config['message'] + ' — 2026-10-15')
         self.assertEqual(item.findtext('guid'), DAY.isoformat())
@@ -82,14 +82,14 @@ class FeedTests(unittest.TestCase):
         html = ET.fromstring('<div>' + item.findtext('description') + '</div>')
         self.assertIsNone(html.find('.//script'))
         self.assertIsNone(html.find('.//b'))
-        self.assertEqual(html.text.rstrip(), config['message'])
+        self.assertEqual(html.findtext('h6'), config['message'])
 
     def test_test_message_has_no_link(self):
         config = dict(CONFIG, enabled=False, message='🍽️ Join the Mensa Train @ 12:30? 🚂')
         xml = feed.build_feed(config, DAY, 'https://example.org', test_id='menu-test')
         item = ET.fromstring(xml).find('channel/item')
         html = ET.fromstring('<div>' + item.findtext('description') + '</div>')
-        self.assertEqual(html.text.rstrip(), config['message'])
+        self.assertEqual(html.findtext('h6'), config['message'])
         self.assertIsNone(html.find('.//a'))
         self.assertIsNone(item.find('link'))
         self.assertEqual(item.findtext('guid'), 'test-menu-test')
@@ -137,7 +137,10 @@ class FeedTests(unittest.TestCase):
         # explicit breaks, not the rendering of a particular Element version.
         for line_break in html.iter("br"):
             line_break.text = "\n"
-        lines = [line.strip() for line in "".join(html.itertext()).splitlines() if line.strip()]
+        fallback = "".join(html.itertext())
+        self.assertIn("Mensa X Menu\n\n" + MENU.mains[0], fallback)
+        self.assertIn("Beilagen & Dessert\n\n" + MENU.sides[0], fallback)
+        lines = [line.strip() for line in fallback.splitlines() if line.strip()]
         self.assertEqual(lines, [CONFIG["message"], "Mensa X Menu", *MENU.mains,
                                  "Beilagen & Dessert", *MENU.sides])
 
@@ -180,7 +183,7 @@ class FeedTests(unittest.TestCase):
         self.assertEqual(item['id'], 'test-offline')
         html = ET.fromstring('<div>' + item['content_html'] + '</div>')
         config = json.loads((ROOT / 'config.json').read_text())
-        self.assertEqual(html.text.rstrip(), config['message'])
+        self.assertEqual(html.findtext('h6'), config['message'])
         self.assertIn("Today's menu is currently unavailable.", item['content_html'])
         self.assertNotIn('<li>', item['content_html'])
         self.assertIn('site offline', logs.output[0])

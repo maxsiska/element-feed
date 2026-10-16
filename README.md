@@ -19,7 +19,8 @@ publish the additional file. The script has no dependencies beyond the Python
 standard library.
 
 The default invitation is **🍽️ Join the Mensa Train @ 12:30? 🚂**.
-The invitation has no embedded link. The RSS title remains plain text with a date.
+The invitation uses the smallest HTML heading (`h6`) and has no embedded link.
+Its exact size depends on the Element client. The RSS title remains plain text with a date.
 Both ordinary invitations and manual tests include that day's live Mensa X menu,
 with **Beilagen & Dessert** nested inside **Mensa X Menu**.
 
@@ -72,6 +73,26 @@ The university's exact installed version has not been confirmed.
    using a feed that already contains a test invitation.
 
 Colleagues can use Element's native emoji reactions on the resulting bot message.
+
+### Messages arrive without notifications
+
+The matching maubot/rss plugin sends `m.notice` by default. Matrix's default
+[push rules](https://spec.matrix.org/latest/client-server-api/#default-override-rules)
+suppress notifications for notices, so this is a likely cause when bot posts
+arrive silently. Coffee Bot's actual subscription setting still needs confirming.
+To send future entries as normal `m.text` messages, send this in the subscribed
+room, replacing `FEED_ID` with the ID from `!coffee subscriptions`:
+
+```text
+!coffee notice FEED_ID false
+```
+
+This changes that room's subscription for everyone; individual notification
+preferences still apply. Set your room notifications to **All messages** (and
+enable sound if desired), and check iOS notification permissions for Element.
+Test with a new manual workflow run while Element is in the background. Existing
+messages will not notify retroactively. Formatting and headings do not control
+notifications.
 
 ## Switch the existing test room to JSON Feed
 
@@ -132,7 +153,8 @@ without a separate heading.
 
 Element Classic on iOS displays the menu expanded because it does not support
 these collapsible sections. Explicit `<br />` breaks separate the invitation,
-section labels, and dishes, with an extra break before **Beilagen & Dessert**.
+section labels, and dishes, with a blank line before the first dish in each
+section and an extra break before **Beilagen & Dessert**.
 Desktop keeps the nested toggles. Check the spacing in a new test message on
 your iPhone; the browser preview cannot verify Element Classic's rendering.
 

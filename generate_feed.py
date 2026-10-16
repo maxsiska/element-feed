@@ -38,15 +38,15 @@ def build_feed(config, today, link, test_id=None, menu=None):
         ET.SubElement(item, "title").text = f"{config['message']} — {today.isoformat()}"
         # RSS descriptions contain HTML encoded as XML text. Escape the plain
         # message first, then add today's menu (keep the title plain).
-        description = escape(config["message"])
-        description += "<br />\n<details><summary>Mensa X Menu</summary><br />"
+        description = f"<h6>{escape(config['message'])}</h6>"
+        description += "<br />\n<details><summary>Mensa X Menu</summary><br /><br />"
         if menu is None:
             description += "<p>Today's menu is currently unavailable.</p>"
         else:
             sides = dish_list(menu.sides) if menu.sides else "<p>No side dishes listed for today.</p>"
             description += (
                 f"{dish_list(menu.mains)}<br />"
-                "<details><summary>Beilagen &amp; Dessert</summary><br />"
+                "<details><summary>Beilagen &amp; Dessert</summary><br /><br />"
                 f"{sides}</details>"
             )
         description += "</details>"
