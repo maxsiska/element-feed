@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from email.utils import parsedate_to_datetime
 from html import unescape
 import json
@@ -88,9 +88,53 @@ class FeedTests(unittest.TestCase):
             output = Path(tmp) / "public"
             feed.main([str(output), "--config", str(config_path), "--test-id", "456"])
             self.assertEqual(ET.parse(output / "feed.xml").findtext("channel/item/guid"), "test-456")
+            json_feed = json.loads((output / "feed.json").read_text(encoding="utf-8"))
+            self.assertEqual(json_feed["items"][0]["id"], "test-456")
             self.assertEqual(config_path.read_text(encoding="utf-8"), original)
             feed.main([str(output), "--config", str(config_path)])
             self.assertEqual(ET.parse(output / "feed.xml").findall("channel/item"), [])
+            self.assertEqual(json.loads((output / "feed.json").read_text())["items"], [])
+
+    def test_json_feed_preserves_nested_menu_labels_without_duplicates(self):
+        rss = feed.build_feed(dict(CONFIG, enabled=False), DAY, "https://example.org", test_id="789")
+        data = json.loads(feed.build_json_feed(rss))
+        [item] = data["items"]
+        self.assertEqual(data["version"], "https://jsonfeed.org/version/1.1")
+        self.assertEqual(item["id"], "test-789")
+        self.assertNotIn("summary", item)
+        html = ET.fromstring("<div>" + item["content_html"] + "</div>")
+        [menu] = html.findall("details")
+        [sides] = menu.findall("details")
+        self.assertEqual(menu.findtext("summary"), "Mensa X Menu")
+        self.assertEqual(sides.findtext("summary"), "Beilagen")
+        self.assertEqual(len(menu.findall("ul/li")), 3)
+        self.assertEqual(len(sides.findall("ul/li")), 4)
+        self.assertNotIn("open", menu.attrib)
+        self.assertNotIn("open", sides.attrib)
+        text = "".join(html.itertext())
+        self.assertEqual(text.count("Mensa X Menu"), 1)
+        self.assertEqual(text.count("Beilagen"), 1)
+        self.assertNotIn("Details", text)
+        self.assertIsNone(html.find(".//a"))
+
+    def test_json_feed_matches_rss_ids_dates_and_content(self):
+        for day, test_id in ((DAY, None), (date(2026, 10, 16), None), (DAY, "123"), (DAY, "124")):
+            with self.subTest(day=day, test_id=test_id):
+                rss = feed.build_feed(CONFIG, day, "https://example.org", test_id=test_id)
+                xml_item = ET.fromstring(rss).find("channel/item")
+                data = json.loads(feed.build_json_feed(rss))
+                [item] = data["items"]
+                self.assertEqual(data["title"], CONFIG["title"])
+                self.assertEqual(data["description"], CONFIG["description"])
+                self.assertEqual(data["home_page_url"], "https://example.org")
+                self.assertEqual(item["id"], f"test-{test_id}" if test_id else day.isoformat())
+                self.assertEqual(item["id"], xml_item.findtext("guid"))
+                self.assertEqual(item["title"], xml_item.findtext("title"))
+                self.assertEqual(item["content_html"], xml_item.findtext("description"))
+                self.assertEqual(datetime.fromisoformat(item["date_published"]),
+                                 parsedate_to_datetime(xml_item.findtext("pubDate")))
+                if test_id is None:
+                    self.assertNotIn("<details>", item["content_html"])
 
     def test_reruns_are_identical_and_days_are_distinct(self):
         self.assertEqual(feed.build_feed(CONFIG, DAY, "x"), feed.build_feed(CONFIG, DAY, "x"))

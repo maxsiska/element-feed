@@ -4,15 +4,19 @@ Posts a daily message, such as a lunch invitation, to an Element (Matrix) room
 without running a server or holding a Matrix access token.
 
 ```text
-GitHub Actions (cron) → generate_feed.py → GitHub Pages feed.xml → RSS bot in the room
+GitHub Actions (cron) → generate_feed.py → GitHub Pages → Coffee Bot → Element
 ```
 
-On weekdays at 12:00 Berlin time, a workflow publishes an RSS feed that contains
-one item for today. An RSS bot that is already in your room (for example the
+On weekdays at 12:00 Berlin time, a workflow publishes feeds that contain
+one item for today. A feed bot that is already in your room (for example the
 university's Coffee Bot) picks it up and posts it. Colleagues reply with
 Element's normal emoji reactions.
 
-The script has no dependencies beyond the Python standard library.
+The script writes both `feed.xml` (RSS) and `feed.json` (JSON Feed), with the same
+entry IDs, dates and content. Use JSON Feed to test the custom collapsible labels
+with Coffee Bot; its RSS parser strips them. No workflow changes are needed to
+publish the additional file. The script has no dependencies beyond the Python
+standard library.
 
 The default invitation is **🍽️ Join the Mensa Train @ 12:30? 🚂**.
 The invitation has no embedded link. The RSS title remains plain text with a date.
@@ -22,8 +26,8 @@ The invitation has no embedded link. The RSS title remains plain text with a dat
 1. Push this repository to GitHub.
 2. Under **Settings → Pages → Source**, choose **GitHub Actions**.
 3. Under **Actions → Publish feed**, click **Run workflow**. While `enabled` is
-   `false` in `config.json`, this publishes an empty feed at
-   `https://<account>.github.io/<repository>/feed.xml`.
+   `false` in `config.json`, this publishes empty feeds at
+   `https://<account>.github.io/<repository>/feed.json` and `feed.xml`.
 4. Invite Coffee Bot and subscribe it to that URL using the instructions below.
 5. Set `"enabled": true` in `config.json` and push. From the next scheduled run
    on, the bot posts the message every weekday.
@@ -67,6 +71,38 @@ The university's exact installed version has not been confirmed.
 
 Colleagues can use Element's native emoji reactions on the resulting bot message.
 
+## Switch the existing test room to JSON Feed
+
+The matching [maubot/rss plugin](https://github.com/maubot/rss/blob/master/rss/bot.py)
+supports JSON Feed and uses its `content_html` directly for the template's
+`$summary` variable. This avoids the RSS parser stripping `<summary>` labels.
+The university's installed version still needs to be checked by subscribing:
+
+1. Keep `"enabled": false`, push the changes, and run **Publish feed** once with
+   the test checkbox **unchecked**. This deploys an empty `feed.json` first.
+2. In the test room, send these as separate messages, using your Pages URL:
+
+   ```text
+   !coffee subscribe https://<account>.github.io/<repository>/feed.json
+   !coffee subscriptions
+   ```
+
+3. Once the new subscription is listed, use its new ID to set the template.
+   Then remove the old `feed.xml` subscription **in this room** to avoid duplicate
+   notifications. Replace `NEW_ID` and `OLD_ID` with the respective feed IDs:
+
+   ```text
+   !coffee template NEW_ID $summary
+   !coffee unsubscribe OLD_ID
+   ```
+
+4. Start a **new** workflow run with the test checkbox **checked**.
+
+If JSON Feed is rejected, keep the existing RSS subscription and ask the bot
+maintainer whether its installed version supports JSON Feed. RSS remains valid,
+but custom toggle labels need the bot to preserve `<summary>`. Neither switching
+subscriptions nor changing a template edits messages already posted.
+
 ## Send a test message
 
 Once `!coffee subscriptions` lists the feed in your test room:
@@ -76,24 +112,33 @@ Once `!coffee subscriptions` lists the feed in your test room:
 3. Check **Send a labeled test message, even when recurring invitations are disabled**
    and run the workflow.
 4. Wait for deployment to succeed, then for Coffee Bot to fetch the feed. The message
-   begins **🧪 TEST — not a real invitation.** Expand the sections under
-   **Mensa X Menu** (three sample mains) and **Beilagen** (four sample sides).
+   begins **🧪 TEST — not a real invitation.** Expand **Mensa X Menu** to see three
+   sample mains, then expand **Beilagen** inside it to see four sample sides.
    Try adding a ✅ reaction.
 
 The samples are fixed lists for testing formatting, **not today's live menu**. They
-appear only in test messages and use two independent, closed HTML `<details>`
-sections, each with a `<summary>` label and a bullet list. No menu is fetched.
-Visible headings above the sections preserve their names even if the bot strips
-the labels. The upstream
+appear only in test messages. **Beilagen** is nested inside **Mensa X Menu**; both
+start closed. Each name appears only as its section's clickable `<summary>` label,
+without a separate heading. No menu is fetched.
+
+The expected layout after opening the main section is:
+
+```text
+▼ Mensa X Menu
+  • Alaska-Seelachs-Filet in Backteig mit Remouladensoße
+  • Gemüsepuffer mit Sauerrahm-Dip
+  • Indischer Eintopf
+  ▶ Beilagen
+```
+
+If the toggle still says **Details**, check that the subscription uses `feed.json`.
+The upstream
 [feedparser sanitizer](https://github.com/kurtmckee/feedparser/blob/develop/feedparser/sanitizer.py)
-allows `<details>` but strips `<summary>`. This likely explains why Coffee Bot
-shows a generic **Details** toggle. Changing that toggle's text requires the bot
-to preserve `<summary>`; changing the feed's label alone cannot fix it. The feed
-supplies **Mensa X Menu** and **Beilagen** as labels for readers that support them.
-If the dishes appear
-immediately or the menu is missing, Coffee Bot or the client may be removing the
-formatting, or the bot template may only be displaying the RSS title. Share the
-result from the test room before connecting a live menu.
+allows `<details>` but strips `<summary>` from RSS, leaving its text inside the
+collapsed body. That explains the generic toggle and, with the previous extra
+headings, the duplicate names. If JSON Feed also loses labels, the university's
+bot or client may apply additional filtering; confirm that with the maintainer.
+If only the invitation appears, check the template as described below.
 
 This publishes to the subscribed feed, so use it while that feed is subscribed only
 in test rooms. It does not change `config.json` or enable recurring invitations.
@@ -137,7 +182,8 @@ test entry with an empty feed. Wait for the test to arrive before deploying agai
 Use real emoji such as 🚂 in `message`; this generator does not expand emoji
 shortcodes. Message text is HTML-escaped, so entering raw HTML does not add formatting.
 
-The sample menus are defined in `SAMPLE_MENUS` in `generate_feed.py`. Regular
+The sample menus are defined in `SAMPLE_MAIN_DISHES` and `SAMPLE_SIDE_DISHES` in
+`generate_feed.py`. Regular
 invitations currently contain only the message. Fetching today's dishes from the
 official menu has not been added yet.
 
@@ -164,5 +210,5 @@ test instead, even when recurring invitations are disabled.
 
 ```sh
 python3 -m unittest discover -s tests -v
-python3 generate_feed.py   # writes public/feed.xml
+python3 generate_feed.py   # writes public/feed.xml and public/feed.json
 ```
