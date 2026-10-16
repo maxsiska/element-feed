@@ -23,11 +23,9 @@ def dish_list(dishes):
     return "<ul>" + "".join(f"<li>{escape(dish)}<br /></li>" for dish in dishes) + "</ul>"
 
 
-def build_feed(config, today, link, test_id=None, menu=None):
+def build_feed(config, today, link, menu=None):
     if menu is not None and menu.day != today:
         raise ValueError("The menu date must match the invitation date")
-    if test_id is not None:
-        config = dict(config, enabled=True)
     rss = ET.Element("rss", version="2.0")
     channel = ET.SubElement(rss, "channel")
     ET.SubElement(channel, "title").text = config["title"]
@@ -51,13 +49,11 @@ def build_feed(config, today, link, test_id=None, menu=None):
             )
         description += "</details>"
         ET.SubElement(item, "description").text = description
-        # Daily entries keep a stable date ID. Tests use the workflow run ID so
-        # a new manual run is distinct and retries reuse the same identifier.
-        ET.SubElement(item, "guid", isPermaLink="false").text = (
-            f"test-{test_id}" if test_id is not None else today.isoformat())
+        # Every execution uses the same daily ID, including manual reruns and
+        # content changes, so the feed bot can suppress repeat invitations.
+        ET.SubElement(item, "guid", isPermaLink="false").text = today.isoformat()
         ET.SubElement(item, "pubDate").text = format_datetime(
-            datetime.now(timezone.utc) if test_id is not None
-            else datetime.combine(today, time(), timezone.utc))
+            datetime.combine(today, time(), timezone.utc))
     ET.indent(rss)
     return ET.tostring(rss, encoding="utf-8", xml_declaration=True) + b"\n"
 
@@ -90,18 +86,17 @@ def main(argv=None):
     parser.add_argument("output", type=Path, nargs="?", default=Path("public"))
     parser.add_argument("--config", type=Path, default=Path("config.json"))
     parser.add_argument("--link", default="https://github.com", help="channel link")
-    parser.add_argument("--test-id", help="Generate a test with the normal message even when disabled; use a unique run ID")
     args = parser.parse_args(argv)
     config = json.loads(args.config.read_text(encoding="utf-8"))
     today = berlin_today()
     menu = None
-    if config["enabled"] or args.test_id is not None:
+    if config["enabled"]:
         try:
             menu = fetch_menu(today)
         except MenuUnavailable as exc:
             logging.warning("Mensa X menu unavailable for %s: %s", today, exc)
     args.output.mkdir(parents=True, exist_ok=True)
-    rss = build_feed(config, today, args.link, test_id=args.test_id, menu=menu)
+    rss = build_feed(config, today, args.link, menu=menu)
     (args.output / "feed.xml").write_bytes(rss)
     (args.output / "feed.json").write_bytes(build_json_feed(rss))
 

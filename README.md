@@ -7,8 +7,9 @@ without running a server or holding a Matrix access token.
 GitHub Actions (cron) → generate_feed.py → GitHub Pages → Coffee Bot → Element
 ```
 
-On weekdays at 12:00 Berlin time, a workflow publishes feeds that contain
-one item for today. A feed bot that is already in your room (for example the
+On weekdays at 11:50 Berlin time, a workflow publishes feeds that contain
+one item for today, allowing time for delivery before noon. This is a buffer,
+not a guaranteed delivery deadline. A feed bot that is already in your room (for example the
 university's Coffee Bot) picks it up and posts it. Colleagues reply with
 Element's normal emoji reactions.
 
@@ -22,8 +23,28 @@ The default invitation is **🍽️ Join the Mensa Train @ 12:30? 🚂**.
 The invitation uses an HTML heading (`h3`) with no extra break before the menu
 and no embedded link. Its exact size depends on the Element client.
 The RSS title remains plain text with a date.
-Both ordinary invitations and manual tests include that day's live Mensa X menu,
+Both scheduled and manual runs include that day's live Mensa X menu,
 with **Beilagen & Dessert** nested inside **Mensa X Menu**.
+
+## Avoiding duplicate invitations
+
+- There is one scheduled run: **11:50 Europe/Berlin, Monday–Friday**. There are
+  no backup runs; a missed or failed run can mean no invitation that day.
+- Every run uses the same `YYYY-MM-DD` entry ID and publication date for that
+  Berlin day. Manual reruns, menu updates, and wording changes do not create
+  another ID. The old unique test-message option has been removed.
+- Keep only **one subscription** to this project in each room: `feed.json`.
+  Check `!coffee subscriptions` and remove an old XML or alternate-URL
+  subscription with `!coffee unsubscribe OLD_ID` in that room.
+- Use local previews or a separate feed subscribed only in a test room for
+  experiments. Changing the bot's template sends a sample message immediately.
+
+The feed produces at most one distinct entry ID per date. Actual message
+deduplication is performed by Coffee Bot; this project cannot enforce a strict
+daily limit inside the university's bot. Its operator would need to enforce that
+limit to guarantee it even after bot state loss, delivery retries, or delayed
+processing of entries from different dates. Do not reset subscriptions or deploy
+an old workflow with unique test IDs to force another post in the live room.
 
 ## Setup
 
@@ -75,6 +96,40 @@ The university's exact installed version has not been confirmed.
 
 Colleagues can use Element's native emoji reactions on the resulting bot message.
 
+### Start posting in the intended room
+
+After testing the formatting:
+
+1. Invite the same Coffee Bot account to the intended room and wait for it to join.
+2. Send these commands as separate messages, using your public Pages URL:
+
+   ```text
+   !coffee subscribe https://<account>.github.io/<repository>/feed.json
+   !coffee subscriptions
+   ```
+
+3. Use the feed ID listed in that room for these two commands, also sent separately:
+
+   ```text
+   !coffee template FEED_ID $summary
+   !coffee notice FEED_ID false
+   ```
+
+   The template command sends a generic sample message. The `notice` command makes
+   future invitations normal messages; each member's notification settings still
+   apply. These settings must be configured in the new room even if its feed ID
+   matches the test room's ID.
+4. Commit and push `"enabled": true` in `config.json` to the default branch.
+   No manual workflow run is needed: the next scheduled run publishes the invitation.
+   The workflow targets 11:50 Europe/Berlin Monday–Friday, with no backup runs.
+   The ten-minute buffer improves the chance of delivery by noon;
+   GitHub execution, Pages caching, and Coffee Bot polling may still delay it.
+
+Once the intended room subscribes, a manual run can publish today's invitation
+there if that daily ID has not already been seen. Further runs reuse the same ID.
+For later formatting experiments, use a separate test feed. If the test room no longer
+needs daily posts, send `!coffee unsubscribe FEED_ID` in the **test room only**.
+
 ### Messages arrive without notifications
 
 The matching maubot/rss plugin sends `m.notice` by default. Matrix's default
@@ -91,75 +146,62 @@ room, replacing `FEED_ID` with the ID from `!coffee subscriptions`:
 This changes that room's subscription for everyone; individual notification
 preferences still apply. Set your room notifications to **All messages** (and
 enable sound if desired), and check iOS notification permissions for Element.
-Test with a new manual workflow run while Element is in the background. Existing
-messages will not notify retroactively. Formatting and headings do not control
-notifications.
+Check the next day's invitation while Element is in the background. A manual
+rerun of an already-seen daily entry will not generate another notification.
+Existing messages will not notify retroactively. Formatting and headings do not
+control notifications.
 
-## Switch the existing test room to JSON Feed
+## Use JSON Feed for collapsible labels
 
 The matching [maubot/rss plugin](https://github.com/maubot/rss/blob/master/rss/bot.py)
-supports JSON Feed and uses its `content_html` directly for the template's
-`$summary` variable. This avoids the RSS parser stripping `<summary>` labels.
-JSON Feed and the nested labels have been confirmed to work on desktop in the test room.
-For a room that still uses the XML feed:
+supports JSON Feed and uses its `content_html` for the template's `$summary`
+variable. JSON Feed and the nested labels work on desktop in the test room.
+The upstream [RSS sanitizer](https://github.com/kurtmckee/feedparser/blob/develop/feedparser/sanitizer.py)
+strips `<summary>` but keeps `<details>`, causing generic **Details** labels.
 
-1. Keep `"enabled": false`, push the changes, and run **Publish feed** once with
-   the test checkbox **unchecked**. This deploys an empty `feed.json` first.
-2. In the test room, send these as separate messages, using your Pages URL:
+Subscribe the room to `feed.json`, set `!coffee template FEED_ID $summary`, and
+remove any existing `feed.xml` subscription from that same room. Use the ID
+shown by `!coffee subscriptions`. If the bot rejects JSON Feed, confirm support
+with its maintainer; do not keep both feed formats subscribed in the live room.
+If an empty feed is rejected during initial setup, enable it and publish a daily
+entry while it is subscribed only in the test room, then retry subscribing.
 
-   ```text
-   !coffee subscribe https://<account>.github.io/<repository>/feed.json
-   !coffee subscriptions
-   ```
+If only the invitation title/link appears, inspect the room's current template:
 
-   If the bot stays silent and the subscription is absent, run the workflow with
-   the **test checkbox checked**, wait for deployment, and retry subscribing.
-   This resolved the empty-feed subscription problem in the university test room.
-   It can also post the invitation through the existing XML subscription.
+```text
+!coffee template FEED_ID
+```
 
-3. Once the new subscription is listed, use its new ID to set the template.
-   Then remove the old `feed.xml` subscription **in this room** to avoid duplicate
-   notifications. Replace `NEW_ID` and `OLD_ID` with the respective feed IDs:
+The desired template is the literal `$summary`. Setting a template sends a
+**generic sample message**, so do formatting experiments in a separate test room.
+Changing a template does not edit messages already posted.
 
-   ```text
-   !coffee template NEW_ID $summary
-   !coffee unsubscribe OLD_ID
-   ```
+## Manual runs and testing
 
-4. Start a **new** workflow run with the test checkbox **checked**.
+**Actions → Publish feed → Run workflow** remains available, without a test
+checkbox. It uses the same configuration and daily entry ID as the scheduled run.
+With `enabled: false`, it publishes an empty feed. With `enabled: true`, it can
+publish today's invitation to every subscribed room if that daily ID is new.
+Running it again does not create a new ID or force Coffee Bot to resend the message.
 
-If JSON Feed is rejected, keep the existing RSS subscription and ask the bot
-maintainer whether its installed version supports JSON Feed. RSS remains valid,
-but custom toggle labels need the bot to preserve `<summary>`. Neither switching
-subscriptions nor changing a template edits messages already posted.
+For testing without notifications, run the unit tests or generate the files
+locally; local generation does not publish anything. To test through Coffee Bot,
+use a separate repository/feed subscribed **only** in a test room. Repeated
+same-day runs still share an ID, so inspect local HTML for formatting changes
+rather than forcing new entries into the production feed.
 
-## Send a test message
-
-Once `!coffee subscriptions` lists the feed in your test room:
-
-1. Keep `"enabled": false` in `config.json` and push the latest project files.
-2. Open **Actions → Publish feed → Run workflow** on the default branch.
-3. Check **Send a test message, even when recurring invitations are disabled**
-   and run the workflow.
-4. Wait for deployment to succeed, then for Coffee Bot to fetch the feed. The message
-   begins **🍽️ Join the Mensa Train @ 12:30? 🚂**. On desktop, expand **Mensa X Menu** to see today's
-   main dishes and soup, then expand **Beilagen & Dessert** inside it.
-   Try adding a ✅ reaction.
-
-Tests use the normal invitation text, without a test prefix, and fetch the same
-live menu as regular invitations. **Beilagen & Dessert** is nested
-inside **Mensa X Menu**; both
-start closed. Each name appears only as its section's clickable `<summary>` label,
-without a separate heading.
+The message begins **🍽️ Join the Mensa Train @ 12:30? 🚂** and includes today's
+live main dishes and soup inside **Mensa X Menu**, with **Beilagen & Dessert**
+nested inside it. Both sections start closed on desktop, with each label shown
+only once. Colleagues can react with ✅.
 
 Element Classic on iOS displays the menu expanded because it does not support
 these collapsible sections. The invitation's heading provides its own line;
 explicit `<br />` breaks separate section labels and dishes, with a blank line
 before the first dish in each section and an extra break before **Beilagen & Dessert**.
-Desktop keeps the nested toggles. Check the spacing in a new test message on
-your iPhone; the browser preview cannot verify Element Classic's rendering.
+The browser preview cannot verify Element Classic's rendering.
 
-The expected layout after opening the main section is:
+The desktop layout after opening the main section is:
 
 ```text
 ▼ Mensa X Menu
@@ -168,45 +210,9 @@ The expected layout after opening the main section is:
   ▶ Beilagen & Dessert
 ```
 
-If the toggle still says **Details**, check that the subscription uses `feed.json`.
-The upstream
-[feedparser sanitizer](https://github.com/kurtmckee/feedparser/blob/develop/feedparser/sanitizer.py)
-allows `<details>` but strips `<summary>` from RSS, leaving its text inside the
-collapsed body. That explains the generic toggle and, with the previous extra
-headings, the duplicate names. If JSON Feed also loses labels, the university's
-bot or client may apply additional filtering; confirm that with the maintainer.
-If only the invitation appears, check the template as described below.
-
-This publishes to the subscribed feed, so use it while that feed is subscribed only
-in test rooms. It does not change `config.json` or enable recurring invitations.
-Each new manual run has a distinct test GUID; rerunning the same workflow run reuses
-its ID. Start a new **Run workflow** to send another test.
-
-If only the invitation title/link appears, check the room's template before
-concluding that collapsible menus are unsupported. In the matching `maubot/rss`
-plugin, you can inspect the current template with the following command (replace
-`FEED_ID` with the number from `!coffee subscriptions`):
-
-```text
-!coffee template FEED_ID
-```
-
-Save the old template, then try showing the RSS description in the test room:
-
-```text
-!coffee template FEED_ID $summary
-```
-
-Send the command as one message in Element, including the literal `$summary`.
-The upstream plugin confirms the change and sends a generic sample notification.
-Then start a new manual test workflow to see our invitation and menu. Changing a
-template does not update old messages. If Coffee Bot rejects the command, confirm
-its local template syntax with the maintainer. Rendering the description is needed
-to test whether its RSS parser and Element preserve `<details>` and `<summary>`.
-
-GitHub Pages caching and bot polling can delay delivery; it may take ten minutes
-or longer. With invitations disabled, the next ordinary deployment replaces the
-test entry with an empty feed. Wait for the test to arrive before deploying again.
+GitHub Pages caching and bot polling can delay delivery by ten minutes or longer.
+For an already-posted daily ID, menu or formatting changes will generally not
+produce another message; check the next day's entry instead.
 
 ## Configuration
 
@@ -222,7 +228,7 @@ shortcodes. Message text is HTML-escaped, so entering raw HTML does not add form
 ### Live menu
 
 `mensa.py` fetches the [official menu page](https://www.studierendenwerk-bielefeld.de/essen-trinken/speiseplan/)
-once per enabled or test run, with a 20-second network timeout. It follows the
+once per enabled run, with a 20-second network timeout. It follows the
 reference repository's selectors: the exact `menuDay` with `data-selector=YYYYMMDD`,
 main dish headlines, and the labels in soup and side-dish lists. It verifies the
 page's selected canteen is **Bielefeld Mensa X (13)**. The reference repository
@@ -240,18 +246,16 @@ still publishes with **Today's menu is currently unavailable.** inside the menu
 section, and the workflow logs a warning. It never substitutes another day's menu
 or sample dishes. If dishes are available but no sides are listed, the nested
 section says so. A later run keeps the same daily ID, so a bot that already posted
-the invitation may not post a recovered menu. Disabled, non-test runs do not fetch
-the menu.
+the invitation may not post a recovered menu. Disabled runs do not fetch the menu.
 
-The time and the weekdays are set by the cron line in
-[.github/workflows/publish.yml](.github/workflows/publish.yml). For example,
-`'30 11 * * 1-3'` posts at 11:30 Monday to Wednesday. The extra minutes
-(`0,7,17`) are retries, because GitHub sometimes drops scheduled runs. Each
-item's ID is the date, so the retries don't post the message twice.
+The time and the weekdays are set by the single cron entry in
+[.github/workflows/publish.yml](.github/workflows/publish.yml):
+`'50 11 * * 1-5'` schedules 11:50 Monday–Friday. `timezone: Europe/Berlin`
+handles daylight saving time. For example, change the entry to `'30 11 * * 1-3'`
+to schedule 11:30 Monday–Wednesday.
 
-**Run workflow** in the Actions tab publishes today's message when enabled,
-including on weekends. With the test checkbox selected, it publishes the same
-message with a unique test ID, even when recurring invitations are disabled.
+**Run workflow** can also publish on weekends, because it is an explicit manual
+execution. It always reuses the daily ID and cannot bypass `enabled: false`.
 
 ## Caveats
 

@@ -1,6 +1,7 @@
 from datetime import date, datetime, timezone
 from email.utils import parsedate_to_datetime
-from html import unescape
+from contextlib import redirect_stderr
+from io import StringIO
 import json
 from pathlib import Path
 import tempfile
@@ -48,24 +49,17 @@ class FeedTests(unittest.TestCase):
     def test_disabled_feed_is_empty(self):
         self.assertEqual(items(dict(CONFIG, enabled=False)), [])
 
-    def test_test_message_works_while_disabled_without_changing_config(self):
-        config = dict(CONFIG, enabled=False)
-        xml = feed.build_feed(config, DAY, "https://example.org", test_id="123")
-        item = ET.fromstring(xml).find("channel/item")
-        self.assertEqual(item.findtext("title"), CONFIG["message"] + " — 2026-10-15")
-        self.assertEqual(item.findtext("description"), items(CONFIG)[0].findtext("description"))
-        self.assertIn(CONFIG["message"], unescape(item.findtext("description")))
-        self.assertFalse(config["enabled"])
-        self.assertEqual(config["message"], CONFIG["message"])
-        self.assertIsNotNone(parsedate_to_datetime(item.findtext("pubDate")).utcoffset())
-
-    def test_test_ids_are_separate_from_daily_ids_and_repeatable(self):
-        def guid(run_id):
-            xml = feed.build_feed(CONFIG, DAY, "https://example.org", test_id=run_id)
-            return ET.fromstring(xml).findtext("channel/item/guid")
-        self.assertEqual(guid("123"), guid("123"))
-        self.assertNotEqual(guid("123"), guid("124"))
-        self.assertNotEqual(guid("123"), items(CONFIG)[0].findtext("guid"))
+    def test_content_changes_keep_the_same_daily_identity(self):
+        # A recovered menu or wording edit must not become another invitation.
+        original = items(CONFIG)[0]
+        for menu in (None, MENU):
+            rss = feed.build_feed(dict(CONFIG, message="Updated invitation"), DAY,
+                                  "https://example.org", menu=menu)
+            updated = ET.fromstring(rss).find("channel/item")
+            self.assertEqual(updated.findtext("guid"), original.findtext("guid"))
+            self.assertEqual(updated.findtext("pubDate"), original.findtext("pubDate"))
+            [json_item] = json.loads(feed.build_json_feed(rss))["items"]
+            self.assertEqual(json_item["id"], DAY.isoformat())
 
     def test_mensa_message_has_no_link(self):
         config = dict(CONFIG, message='🍽️ Join the Mensa Train @ 12:30? 🚂')
@@ -85,40 +79,49 @@ class FeedTests(unittest.TestCase):
         self.assertIsNone(html.find('.//b'))
         self.assertEqual(html.findtext('h3'), config['message'])
 
-    def test_test_message_has_no_link(self):
-        config = dict(CONFIG, enabled=False, message='🍽️ Join the Mensa Train @ 12:30? 🚂')
-        xml = feed.build_feed(config, DAY, 'https://example.org', test_id='menu-test')
-        item = ET.fromstring(xml).find('channel/item')
-        html = ET.fromstring('<div>' + item.findtext('description') + '</div>')
-        self.assertEqual(html.findtext('h3'), config['message'])
-        self.assertIsNone(html.find('.//a'))
-        self.assertIsNone(item.find('link'))
-        self.assertEqual(item.findtext('guid'), 'test-menu-test')
-
-    def test_cli_test_mode_does_not_enable_recurring_messages(self):
+    def test_cli_disabled_mode_does_not_fetch_or_enable_messages(self):
         with tempfile.TemporaryDirectory() as tmp:
             config_path = Path(tmp) / "config.json"
             original = json.dumps(dict(CONFIG, enabled=False))
             config_path.write_text(original, encoding="utf-8")
             output = Path(tmp) / "public"
-            feed.main([str(output), "--config", str(config_path), "--test-id", "456"])
-            self.assertEqual(ET.parse(output / "feed.xml").findtext("channel/item/guid"), "test-456")
-            json_feed = json.loads((output / "feed.json").read_text(encoding="utf-8"))
-            self.assertEqual(json_feed["items"][0]["id"], "test-456")
-            self.assertEqual(config_path.read_text(encoding="utf-8"), original)
-            self.fetch_menu.reset_mock()
             feed.main([str(output), "--config", str(config_path)])
             self.fetch_menu.assert_not_called()
+            self.assertEqual(config_path.read_text(encoding="utf-8"), original)
             self.assertEqual(ET.parse(output / "feed.xml").findall("channel/item"), [])
             self.assertEqual(json.loads((output / "feed.json").read_text())["items"], [])
 
+    def test_cli_reruns_keep_one_daily_item(self):
+        with tempfile.TemporaryDirectory() as tmp, patch("generate_feed.berlin_today", return_value=DAY):
+            config_path = Path(tmp) / "config.json"
+            config_path.write_text(json.dumps(CONFIG), encoding="utf-8")
+            output = Path(tmp) / "public"
+            results = []
+            for _ in range(2):
+                feed.main([str(output), "--config", str(config_path)])
+                [xml_item] = ET.parse(output / "feed.xml").findall("channel/item")
+                [json_item] = json.loads((output / "feed.json").read_text())["items"]
+                self.assertEqual(xml_item.findtext("guid"), DAY.isoformat())
+                self.assertEqual(json_item["id"], DAY.isoformat())
+                results.append(((output / "feed.xml").read_bytes(),
+                                (output / "feed.json").read_bytes()))
+            self.assertEqual(results[0], results[1])
+
+    def test_cli_rejects_unique_test_ids_before_writing(self):
+        with tempfile.TemporaryDirectory() as tmp, redirect_stderr(StringIO()):
+            output = Path(tmp) / "public"
+            with self.assertRaises(SystemExit) as error:
+                feed.main([str(output), "--test-id", "another-message"])
+            self.assertEqual(error.exception.code, 2)
+            self.assertFalse(output.exists())
+            self.fetch_menu.assert_not_called()
+
     def test_json_feed_preserves_nested_menu_labels_without_duplicates(self):
-        rss = feed.build_feed(dict(CONFIG, enabled=False), DAY, "https://example.org",
-                              test_id="789", menu=MENU)
+        rss = feed.build_feed(CONFIG, DAY, "https://example.org", menu=MENU)
         data = json.loads(feed.build_json_feed(rss))
         [item] = data["items"]
         self.assertEqual(data["version"], "https://jsonfeed.org/version/1.1")
-        self.assertEqual(item["id"], "test-789")
+        self.assertEqual(item["id"], DAY.isoformat())
         self.assertNotIn("summary", item)
         html = ET.fromstring("<div>" + item["content_html"] + "</div>")
         [menu] = html.findall("details")
@@ -146,9 +149,9 @@ class FeedTests(unittest.TestCase):
                                  "Beilagen & Dessert", *MENU.sides])
 
     def test_json_feed_matches_rss_ids_dates_and_content(self):
-        for day, test_id in ((DAY, None), (date(2026, 10, 16), None), (DAY, "123"), (DAY, "124")):
-            with self.subTest(day=day, test_id=test_id):
-                rss = feed.build_feed(CONFIG, day, "https://example.org", test_id=test_id,
+        for day in (DAY, date(2026, 10, 16)):
+            with self.subTest(day=day):
+                rss = feed.build_feed(CONFIG, day, "https://example.org",
                                       menu=Menu(day, MENU.mains, MENU.sides))
                 xml_item = ET.fromstring(rss).find("channel/item")
                 data = json.loads(feed.build_json_feed(rss))
@@ -156,7 +159,7 @@ class FeedTests(unittest.TestCase):
                 self.assertEqual(data["title"], CONFIG["title"])
                 self.assertEqual(data["description"], CONFIG["description"])
                 self.assertEqual(data["home_page_url"], "https://example.org")
-                self.assertEqual(item["id"], f"test-{test_id}" if test_id else day.isoformat())
+                self.assertEqual(item["id"], day.isoformat())
                 self.assertEqual(item["id"], xml_item.findtext("guid"))
                 self.assertEqual(item["title"], xml_item.findtext("title"))
                 self.assertEqual(item["content_html"], xml_item.findtext("description"))
@@ -178,13 +181,16 @@ class FeedTests(unittest.TestCase):
 
     def test_fetch_failure_still_publishes_invitation_with_unavailable_notice(self):
         self.fetch_menu.side_effect = MenuUnavailable('site offline')
-        with tempfile.TemporaryDirectory() as tmp, self.assertLogs(level='WARNING') as logs:
-            feed.main([tmp, '--config', str(ROOT / 'config.json'), '--test-id', 'offline'])
+        with (tempfile.TemporaryDirectory() as tmp,
+              patch("generate_feed.berlin_today", return_value=DAY),
+              self.assertLogs(level='WARNING') as logs):
+            config_path = Path(tmp) / 'config.json'
+            config_path.write_text(json.dumps(CONFIG), encoding='utf-8')
+            feed.main([tmp, '--config', str(config_path)])
             [item] = json.loads((Path(tmp) / 'feed.json').read_text())['items']
-        self.assertEqual(item['id'], 'test-offline')
+        self.assertEqual(item['id'], DAY.isoformat())
         html = ET.fromstring('<div>' + item['content_html'] + '</div>')
-        config = json.loads((ROOT / 'config.json').read_text())
-        self.assertEqual(html.findtext('h3'), config['message'])
+        self.assertEqual(html.findtext('h3'), CONFIG['message'])
         self.assertIn("Today's menu is currently unavailable.", item['content_html'])
         self.assertNotIn('<li>', item['content_html'])
         self.assertIn('site offline', logs.output[0])

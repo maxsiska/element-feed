@@ -2,15 +2,10 @@ name: Publish feed
 
 on:
   schedule:
-    # 12:00 Berlin time on weekdays, with retries in case GitHub drops a run.
-    - cron: '0,7,17 12 * * 1-5'
+    # One scheduled publication per weekday, at 11:50 Berlin time.
+    - cron: '50 11 * * 1-5'
       timezone: Europe/Berlin
   workflow_dispatch:
-    inputs:
-      test_message:
-        description: 'Send a test message, even when recurring invitations are disabled'
-        type: boolean
-        default: false
 
 permissions:
   contents: read
@@ -34,14 +29,8 @@ jobs:
           persist-credentials: false
       - name: Generate feed
         env:
-          TEST_MESSAGE: ${{ github.event_name == 'workflow_dispatch' && inputs.test_message }}
-        shell: bash
-        run: |
-          args=(--link "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" public)
-          if [[ "$TEST_MESSAGE" == "true" ]]; then
-            args+=(--test-id "$GITHUB_RUN_ID")
-          fi
-          python3 generate_feed.py "${args[@]}"
+          FEED_LINK: ${{ github.server_url }}/${{ github.repository }}
+        run: python3 generate_feed.py --link "$FEED_LINK" public
       - uses: actions/upload-pages-artifact@v4
         with:
           path: public/
