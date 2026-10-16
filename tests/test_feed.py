@@ -133,6 +133,13 @@ class FeedTests(unittest.TestCase):
         self.assertEqual(text.count("Beilagen & Dessert"), 1)
         self.assertNotIn("Details", text)
         self.assertIsNone(html.find(".//a"))
+        # Check the fallback without relying on block/list layout. This verifies
+        # explicit breaks, not the rendering of a particular Element version.
+        for line_break in html.iter("br"):
+            line_break.text = "\n"
+        lines = [line.strip() for line in "".join(html.itertext()).splitlines() if line.strip()]
+        self.assertEqual(lines, [CONFIG["message"], "Mensa X Menu", *MENU.mains,
+                                 "Beilagen & Dessert", *MENU.sides])
 
     def test_json_feed_matches_rss_ids_dates_and_content(self):
         for day, test_id in ((DAY, None), (date(2026, 10, 16), None), (DAY, "123"), (DAY, "124")):

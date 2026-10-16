@@ -19,7 +19,8 @@ def berlin_today(now=None):
 
 
 def dish_list(dishes):
-    return "<ul>" + "".join(f"<li>{escape(dish)}</li>" for dish in dishes) + "</ul>"
+    # Explicit breaks keep dish names separate when clients flatten <details>.
+    return "<ul>" + "".join(f"<li>{escape(dish)}<br /></li>" for dish in dishes) + "</ul>"
 
 
 def build_feed(config, today, link, test_id=None, menu=None):
@@ -38,14 +39,14 @@ def build_feed(config, today, link, test_id=None, menu=None):
         # RSS descriptions contain HTML encoded as XML text. Escape the plain
         # message first, then add today's menu (keep the title plain).
         description = escape(config["message"])
-        description += "\n<details><summary>Mensa X Menu</summary>"
+        description += "<br />\n<details><summary>Mensa X Menu</summary><br />"
         if menu is None:
             description += "<p>Today's menu is currently unavailable.</p>"
         else:
             sides = dish_list(menu.sides) if menu.sides else "<p>No side dishes listed for today.</p>"
             description += (
-                f"{dish_list(menu.mains)}"
-                "<details><summary>Beilagen &amp; Dessert</summary>"
+                f"{dish_list(menu.mains)}<br />"
+                "<details><summary>Beilagen &amp; Dessert</summary><br />"
                 f"{sides}</details>"
             )
         description += "</details>"

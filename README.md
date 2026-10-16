@@ -78,7 +78,7 @@ Colleagues can use Element's native emoji reactions on the resulting bot message
 The matching [maubot/rss plugin](https://github.com/maubot/rss/blob/master/rss/bot.py)
 supports JSON Feed and uses its `content_html` directly for the template's
 `$summary` variable. This avoids the RSS parser stripping `<summary>` labels.
-JSON Feed and the nested labels have been confirmed to work in the test room.
+JSON Feed and the nested labels have been confirmed to work on desktop in the test room.
 For a room that still uses the XML feed:
 
 1. Keep `"enabled": false`, push the changes, and run **Publish feed** once with
@@ -120,7 +120,7 @@ Once `!coffee subscriptions` lists the feed in your test room:
 3. Check **Send a test message, even when recurring invitations are disabled**
    and run the workflow.
 4. Wait for deployment to succeed, then for Coffee Bot to fetch the feed. The message
-   begins **🍽️ Join the Mensa Train @ 12:30? 🚂**. Expand **Mensa X Menu** to see today's
+   begins **🍽️ Join the Mensa Train @ 12:30? 🚂**. On desktop, expand **Mensa X Menu** to see today's
    main dishes and soup, then expand **Beilagen & Dessert** inside it.
    Try adding a ✅ reaction.
 
@@ -129,6 +129,12 @@ live menu as regular invitations. **Beilagen & Dessert** is nested
 inside **Mensa X Menu**; both
 start closed. Each name appears only as its section's clickable `<summary>` label,
 without a separate heading.
+
+Element Classic on iOS displays the menu expanded because it does not support
+these collapsible sections. Explicit `<br />` breaks separate the invitation,
+section labels, and dishes, with an extra break before **Beilagen & Dessert**.
+Desktop keeps the nested toggles. Check the spacing in a new test message on
+your iPhone; the browser preview cannot verify Element Classic's rendering.
 
 The expected layout after opening the main section is:
 
