@@ -14,6 +14,10 @@ Element's normal emoji reactions.
 
 The script has no dependencies beyond the Python standard library.
 
+The default invitation is **🍽️ Join the [Mensa](https://www.studierendenwerk-bielefeld.de/essen-trinken/speiseplan/) Train @ 12:30? 🚂**.
+The RSS description links the word “Mensa” to the official menu page; the item
+also supplies that URL as its link. The RSS title remains plain text with a date.
+
 ## Setup
 
 1. Push this repository to GitHub.
@@ -70,7 +74,15 @@ Once `!coffee subscriptions` lists the feed in your test room:
 3. Check **Send a labeled test message, even when recurring invitations are disabled**
    and run the workflow.
 4. Wait for deployment to succeed, then for Coffee Bot to fetch the feed. The message
-   begins **🧪 TEST — not a real invitation.** Try adding a ✅ reaction.
+   begins **🧪 TEST — not a real invitation.** Click **Sample Mensa X menu — click to
+   expand** to reveal three sample dishes. Try adding a ✅ reaction.
+
+The sample is a fixed list for testing formatting, **not today's live menu**. It
+appears only in test messages and uses a closed HTML `<details>` section with a
+`<summary>` label and a bullet list. No menu is fetched. If the dishes appear
+immediately or the menu is missing, Coffee Bot or the client may be removing the
+formatting, or the bot template may only be displaying the RSS title. Share the
+result from the test room before connecting a live menu.
 
 This publishes to the subscribed feed, so use it while that feed is subscribed only
 in test rooms. It does not change `config.json` or enable recurring invitations.
@@ -88,7 +100,26 @@ test entry with an empty feed. Wait for the test to arrive before deploying agai
 | --- | --- |
 | `enabled` | `false` publishes an empty feed (nothing gets posted) |
 | `message` | Text of the post; the date is appended to the item title |
+| `menu_url` | Optional menu URL; links the first “Mensa” in the description and supplies the RSS item link |
 | `title`, `description` | Feed metadata |
+
+Use real emoji such as 🚂 in `message`; this generator does not expand emoji
+shortcodes. Message text is HTML-escaped, so entering raw HTML does not add formatting.
+
+The menu URL comes from the reference project's `--url-mensa-x` setting.
+The official page currently defaults to **Bielefeld Mensa X** and selects today's
+menu. It is a live page, so opening an older invitation shows the currently
+available menu, not an archived copy of that invitation's day. Although its day
+buttons have date fragments, the current page script selects the active tab rather
+than reading the URL fragment; the feed therefore uses the verified base URL.
+
+The linked description uses standard RSS HTML. Coffee Bot's template must render
+the description as HTML for just “Mensa” to be clickable; if it only shows the
+title, the link may appear differently or not at all. Run a labeled test to check
+the result and use a verified template example from the Mensaplan room if needed.
+A menu spoiler is not included: that would also require menu scraping and the bot
+preserving Matrix's `data-mx-spoiler` attribute. Linking keeps generation independent
+of menu-site availability and adds no package dependencies.
 
 The time and the weekdays are set by the cron line in
 [.github/workflows/publish.yml](.github/workflows/publish.yml). For example,

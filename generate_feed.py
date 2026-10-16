@@ -4,9 +4,18 @@
 import argparse
 from datetime import date, datetime, time, timezone
 from email.utils import format_datetime
+from html import escape
 import json
 from pathlib import Path
+from urllib.parse import urlsplit
 import xml.etree.ElementTree as ET
+
+
+SAMPLE_MENU = (
+    "Alaska-Seelachs-Filet in Backteig mit Remouladensoße",
+    "Gemüsepuffer mit Sauerrahm-Dip",
+    "Indischer Eintopf",
+)
 
 
 def build_feed(config, today, link, test_id=None):
@@ -21,7 +30,26 @@ def build_feed(config, today, link, test_id=None):
     if config["enabled"]:
         item = ET.SubElement(channel, "item")
         ET.SubElement(item, "title").text = f"{config['message']} — {today.isoformat()}"
-        ET.SubElement(item, "description").text = config["message"]
+        # RSS descriptions contain HTML encoded as XML text. Escape the plain
+        # message first, then add the link and test menu (keep the title plain).
+        description = escape(config["message"])
+        menu_url = config.get("menu_url")
+        if menu_url:
+            parts = urlsplit(menu_url)
+            if parts.scheme not in ("https", "http") or not parts.hostname:
+                raise ValueError("menu_url must be an absolute HTTP(S) URL")
+            before, label, after = config["message"].partition("Mensa")
+            if label:
+                description = (f'{escape(before)}<a href="{escape(menu_url, quote=True)}">'
+                               f'Mensa</a>{escape(after)}')
+            ET.SubElement(item, "link").text = menu_url
+        if test_id is not None:
+            dishes = "".join(f"<li>{escape(dish)}</li>" for dish in SAMPLE_MENU)
+            description += (
+                "\n<details><summary>Sample Mensa X menu — click to expand</summary>"
+                f"<ul>{dishes}</ul></details>"
+            )
+        ET.SubElement(item, "description").text = description
         # Daily entries keep a stable date ID. Tests use the workflow run ID so
         # a new manual run is distinct and retries reuse the same identifier.
         ET.SubElement(item, "guid", isPermaLink="false").text = (
