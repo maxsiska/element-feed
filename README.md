@@ -13,13 +13,15 @@ university's Coffee Bot) picks it up and posts it. Colleagues reply with
 Element's normal emoji reactions.
 
 The script writes both `feed.xml` (RSS) and `feed.json` (JSON Feed), with the same
-entry IDs, dates and content. Use JSON Feed to test the custom collapsible labels
+entry IDs, dates and content. Use JSON Feed for the custom collapsible labels
 with Coffee Bot; its RSS parser strips them. No workflow changes are needed to
 publish the additional file. The script has no dependencies beyond the Python
 standard library.
 
 The default invitation is **🍽️ Join the Mensa Train @ 12:30? 🚂**.
 The invitation has no embedded link. The RSS title remains plain text with a date.
+Both ordinary invitations and manual tests include that day's live Mensa X menu,
+with **Beilagen & Dessert** nested inside **Mensa X Menu**.
 
 ## Setup
 
@@ -76,7 +78,8 @@ Colleagues can use Element's native emoji reactions on the resulting bot message
 The matching [maubot/rss plugin](https://github.com/maubot/rss/blob/master/rss/bot.py)
 supports JSON Feed and uses its `content_html` directly for the template's
 `$summary` variable. This avoids the RSS parser stripping `<summary>` labels.
-The university's installed version still needs to be checked by subscribing:
+JSON Feed and the nested labels have been confirmed to work in the test room.
+For a room that still uses the XML feed:
 
 1. Keep `"enabled": false`, push the changes, and run **Publish feed** once with
    the test checkbox **unchecked**. This deploys an empty `feed.json` first.
@@ -86,6 +89,11 @@ The university's installed version still needs to be checked by subscribing:
    !coffee subscribe https://<account>.github.io/<repository>/feed.json
    !coffee subscriptions
    ```
+
+   If the bot stays silent and the subscription is absent, run the workflow with
+   the **test checkbox checked**, wait for deployment, and retry subscribing.
+   This resolved the empty-feed subscription problem in the university test room.
+   It can also post the invitation through the existing XML subscription.
 
 3. Once the new subscription is listed, use its new ID to set the template.
    Then remove the old `feed.xml` subscription **in this room** to avoid duplicate
@@ -109,26 +117,26 @@ Once `!coffee subscriptions` lists the feed in your test room:
 
 1. Keep `"enabled": false` in `config.json` and push the latest project files.
 2. Open **Actions → Publish feed → Run workflow** on the default branch.
-3. Check **Send a labeled test message, even when recurring invitations are disabled**
+3. Check **Send a test message, even when recurring invitations are disabled**
    and run the workflow.
 4. Wait for deployment to succeed, then for Coffee Bot to fetch the feed. The message
-   begins **🧪 TEST — not a real invitation.** Expand **Mensa X Menu** to see three
-   sample mains, then expand **Beilagen** inside it to see four sample sides.
+   begins **🍽️ Join the Mensa Train @ 12:30? 🚂**. Expand **Mensa X Menu** to see today's
+   main dishes and soup, then expand **Beilagen & Dessert** inside it.
    Try adding a ✅ reaction.
 
-The samples are fixed lists for testing formatting, **not today's live menu**. They
-appear only in test messages. **Beilagen** is nested inside **Mensa X Menu**; both
+Tests use the normal invitation text, without a test prefix, and fetch the same
+live menu as regular invitations. **Beilagen & Dessert** is nested
+inside **Mensa X Menu**; both
 start closed. Each name appears only as its section's clickable `<summary>` label,
-without a separate heading. No menu is fetched.
+without a separate heading.
 
 The expected layout after opening the main section is:
 
 ```text
 ▼ Mensa X Menu
-  • Alaska-Seelachs-Filet in Backteig mit Remouladensoße
-  • Gemüsepuffer mit Sauerrahm-Dip
-  • Indischer Eintopf
-  ▶ Beilagen
+  • Today's main dishes
+  • Today's soup options
+  ▶ Beilagen & Dessert
 ```
 
 If the toggle still says **Details**, check that the subscription uses `feed.json`.
@@ -182,10 +190,29 @@ test entry with an empty feed. Wait for the test to arrive before deploying agai
 Use real emoji such as 🚂 in `message`; this generator does not expand emoji
 shortcodes. Message text is HTML-escaped, so entering raw HTML does not add formatting.
 
-The sample menus are defined in `SAMPLE_MAIN_DISHES` and `SAMPLE_SIDE_DISHES` in
-`generate_feed.py`. Regular
-invitations currently contain only the message. Fetching today's dishes from the
-official menu has not been added yet.
+### Live menu
+
+`mensa.py` fetches the [official menu page](https://www.studierendenwerk-bielefeld.de/essen-trinken/speiseplan/)
+once per enabled or test run, with a 20-second network timeout. It follows the
+reference repository's selectors: the exact `menuDay` with `data-selector=YYYYMMDD`,
+main dish headlines, and the labels in soup and side-dish lists. It verifies the
+page's selected canteen is **Bielefeld Mensa X (13)**. The reference repository
+is not needed at runtime.
+
+The date comes from **Europe/Berlin**, including daylight saving time, rather than
+the runner's local date. Only names are included: no prices, allergens, dietary
+labels or climate scores. Soup joins the main dishes; small-portion variants
+ending in “klein” or “(klein)” are omitted. The site's **Mensa Beilagen** list
+includes desserts; these remain inside the nested **Beilagen & Dessert** section.
+Repeated names and modal-dialog copies are ignored.
+
+If today's menu is absent, the website changes, or fetching fails, the invitation
+still publishes with **Today's menu is currently unavailable.** inside the menu
+section, and the workflow logs a warning. It never substitutes another day's menu
+or sample dishes. If dishes are available but no sides are listed, the nested
+section says so. A later run keeps the same daily ID, so a bot that already posted
+the invitation may not post a recovered menu. Disabled, non-test runs do not fetch
+the menu.
 
 The time and the weekdays are set by the cron line in
 [.github/workflows/publish.yml](.github/workflows/publish.yml). For example,
@@ -194,8 +221,8 @@ The time and the weekdays are set by the cron line in
 item's ID is the date, so the retries don't post the message twice.
 
 **Run workflow** in the Actions tab publishes today's message when enabled,
-including on weekends. With the test checkbox selected, it publishes a labeled
-test instead, even when recurring invitations are disabled.
+including on weekends. With the test checkbox selected, it publishes the same
+message with a unique test ID, even when recurring invitations are disabled.
 
 ## Caveats
 
@@ -212,3 +239,6 @@ test instead, even when recurring invitations are disabled.
 python3 -m unittest discover -s tests -v
 python3 generate_feed.py   # writes public/feed.xml and public/feed.json
 ```
+
+Tests use a small HTML fixture modeled on the official page, including its
+omitted closing tags and duplicate modal content. They run without network access.

@@ -2,35 +2,31 @@
 """Write RSS and JSON feeds containing today's message for an Element feed bot."""
 
 import argparse
-from datetime import date, datetime, time, timezone
+from datetime import datetime, time, timezone
 from email.utils import format_datetime, parsedate_to_datetime
 from html import escape
 import json
+import logging
 from pathlib import Path
 import xml.etree.ElementTree as ET
+from zoneinfo import ZoneInfo
+
+from mensa import MenuUnavailable, fetch_menu
 
 
-SAMPLE_MAIN_DISHES = (
-    "Alaska-Seelachs-Filet in Backteig mit Remouladensoße",
-    "Gemüsepuffer mit Sauerrahm-Dip",
-    "Indischer Eintopf",
-)
-SAMPLE_SIDE_DISHES = (
-    "Bratkartoffeln mit frischen Zwiebeln",
-    "Djuvec-Reis",
-    "Penne Rigate",
-    "Blumenkohl",
-)
+def berlin_today(now=None):
+    return (now or datetime.now(timezone.utc)).astimezone(ZoneInfo("Europe/Berlin")).date()
 
 
 def dish_list(dishes):
     return "<ul>" + "".join(f"<li>{escape(dish)}</li>" for dish in dishes) + "</ul>"
 
 
-def build_feed(config, today, link, test_id=None):
+def build_feed(config, today, link, test_id=None, menu=None):
+    if menu is not None and menu.day != today:
+        raise ValueError("The menu date must match the invitation date")
     if test_id is not None:
-        config = dict(config, enabled=True,
-                      message="🧪 TEST — not a real invitation. " + config["message"])
+        config = dict(config, enabled=True)
     rss = ET.Element("rss", version="2.0")
     channel = ET.SubElement(rss, "channel")
     ET.SubElement(channel, "title").text = config["title"]
@@ -40,16 +36,19 @@ def build_feed(config, today, link, test_id=None):
         item = ET.SubElement(channel, "item")
         ET.SubElement(item, "title").text = f"{config['message']} — {today.isoformat()}"
         # RSS descriptions contain HTML encoded as XML text. Escape the plain
-        # message first, then add the test menus (keep the title plain).
+        # message first, then add today's menu (keep the title plain).
         description = escape(config["message"])
-        if test_id is not None:
+        description += "\n<details><summary>Mensa X Menu</summary>"
+        if menu is None:
+            description += "<p>Today's menu is currently unavailable.</p>"
+        else:
+            sides = dish_list(menu.sides) if menu.sides else "<p>No side dishes listed for today.</p>"
             description += (
-                "\n<details><summary>Mensa X Menu</summary>"
-                f"{dish_list(SAMPLE_MAIN_DISHES)}"
-                "<details><summary>Beilagen</summary>"
-                f"{dish_list(SAMPLE_SIDE_DISHES)}"
-                "</details></details>"
+                f"{dish_list(menu.mains)}"
+                "<details><summary>Beilagen &amp; Dessert</summary>"
+                f"{sides}</details>"
             )
+        description += "</details>"
         ET.SubElement(item, "description").text = description
         # Daily entries keep a stable date ID. Tests use the workflow run ID so
         # a new manual run is distinct and retries reuse the same identifier.
@@ -90,11 +89,18 @@ def main(argv=None):
     parser.add_argument("output", type=Path, nargs="?", default=Path("public"))
     parser.add_argument("--config", type=Path, default=Path("config.json"))
     parser.add_argument("--link", default="https://github.com", help="channel link")
-    parser.add_argument("--test-id", help="Generate a labeled test even when disabled; use a unique run ID")
+    parser.add_argument("--test-id", help="Generate a test with the normal message even when disabled; use a unique run ID")
     args = parser.parse_args(argv)
     config = json.loads(args.config.read_text(encoding="utf-8"))
+    today = berlin_today()
+    menu = None
+    if config["enabled"] or args.test_id is not None:
+        try:
+            menu = fetch_menu(today)
+        except MenuUnavailable as exc:
+            logging.warning("Mensa X menu unavailable for %s: %s", today, exc)
     args.output.mkdir(parents=True, exist_ok=True)
-    rss = build_feed(config, date.today(), args.link, test_id=args.test_id)
+    rss = build_feed(config, today, args.link, test_id=args.test_id, menu=menu)
     (args.output / "feed.xml").write_bytes(rss)
     (args.output / "feed.json").write_bytes(build_json_feed(rss))
 

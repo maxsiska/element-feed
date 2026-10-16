@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       test_message:
-        description: 'Send a labeled test message, even when recurring invitations are disabled'
+        description: 'Send a test message, even when recurring invitations are disabled'
         type: boolean
         default: false
 
