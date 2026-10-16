@@ -19,8 +19,9 @@ publish the additional file. The script has no dependencies beyond the Python
 standard library.
 
 The default invitation is **🍽️ Join the Mensa Train @ 12:30? 🚂**.
-The invitation uses the smallest HTML heading (`h6`) and has no embedded link.
-Its exact size depends on the Element client. The RSS title remains plain text with a date.
+The invitation uses an HTML heading (`h3`) with no extra break before the menu
+and no embedded link. Its exact size depends on the Element client.
+The RSS title remains plain text with a date.
 Both ordinary invitations and manual tests include that day's live Mensa X menu,
 with **Beilagen & Dessert** nested inside **Mensa X Menu**.
 
@@ -152,9 +153,9 @@ start closed. Each name appears only as its section's clickable `<summary>` labe
 without a separate heading.
 
 Element Classic on iOS displays the menu expanded because it does not support
-these collapsible sections. Explicit `<br />` breaks separate the invitation,
-section labels, and dishes, with a blank line before the first dish in each
-section and an extra break before **Beilagen & Dessert**.
+these collapsible sections. The invitation's heading provides its own line;
+explicit `<br />` breaks separate section labels and dishes, with a blank line
+before the first dish in each section and an extra break before **Beilagen & Dessert**.
 Desktop keeps the nested toggles. Check the spacing in a new test message on
 your iPhone; the browser preview cannot verify Element Classic's rendering.
 
