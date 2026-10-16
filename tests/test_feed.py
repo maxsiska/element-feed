@@ -53,46 +53,32 @@ class FeedTests(unittest.TestCase):
         self.assertNotEqual(guid("123"), guid("124"))
         self.assertNotEqual(guid("123"), items(CONFIG)[0].findtext("guid"))
 
-    def test_mensa_link_is_in_description_and_item_link_but_not_title(self):
-        config = dict(CONFIG, message='🍽️ Mensa at 12:30? 🚂',
-                      menu_url='https://example.org/menu?x=1&y="two"')
+    def test_mensa_message_has_no_link(self):
+        config = dict(CONFIG, message='🍽️ Join the Mensa Train @ 12:30? 🚂')
         [item] = items(config)
         html = ET.fromstring('<div>' + item.findtext('description') + '</div>')
-        self.assertEqual(html.find('a').text, 'Mensa')
-        self.assertEqual(html.find('a').get('href'), config['menu_url'])
+        self.assertIsNone(html.find('.//a'))
         self.assertEqual(''.join(html.itertext()), config['message'])
-        self.assertEqual(item.findtext('link'), config['menu_url'])
+        self.assertIsNone(item.find('link'))
         self.assertEqual(item.findtext('title'), config['message'] + ' — 2026-10-15')
         self.assertEqual(item.findtext('guid'), DAY.isoformat())
 
     def test_literal_html_in_message_stays_text(self):
-        config = dict(CONFIG, message='Mensa <script> & <b>food</b>',
-                      menu_url='https://example.org/menu')
+        config = dict(CONFIG, message='Mensa <script> & <b>food</b>')
         [item] = items(config)
         html = ET.fromstring('<div>' + item.findtext('description') + '</div>')
-        self.assertEqual([child.tag for child in html], ['a'])
+        self.assertEqual(list(html), [])
         self.assertEqual(''.join(html.itertext()), config['message'])
 
-    def test_test_prefix_keeps_mensa_link(self):
-        config = dict(CONFIG, enabled=False, message='🍽️ Mensa at 12:30? 🚂',
-                      menu_url='https://example.org/menu')
-        xml = feed.build_feed(config, DAY, 'https://example.org', test_id='linked-test')
+    def test_test_message_has_no_link(self):
+        config = dict(CONFIG, enabled=False, message='🍽️ Join the Mensa Train @ 12:30? 🚂')
+        xml = feed.build_feed(config, DAY, 'https://example.org', test_id='menu-test')
         item = ET.fromstring(xml).find('channel/item')
         html = ET.fromstring('<div>' + item.findtext('description') + '</div>')
         self.assertIn('TEST — not a real invitation', html.text)
-        self.assertEqual(html.find('a').text, 'Mensa')
-        self.assertEqual(item.findtext('guid'), 'test-linked-test')
-
-    def test_missing_mensa_word_keeps_message_and_provides_item_link(self):
-        config = dict(CONFIG, menu_url='https://example.org/menu')
-        [item] = items(config)
-        self.assertEqual(unescape(item.findtext('description')), config['message'])
-        self.assertEqual(item.findtext('link'), config['menu_url'])
-
-    def test_menu_link_rejects_non_web_schemes(self):
-        for url in ('javascript:alert(1)', '/relative/menu', 'file:///menu.html'):
-            with self.subTest(url=url), self.assertRaises(ValueError):
-                items(dict(CONFIG, menu_url=url))
+        self.assertIsNone(html.find('.//a'))
+        self.assertIsNone(item.find('link'))
+        self.assertEqual(item.findtext('guid'), 'test-menu-test')
 
     def test_cli_test_mode_does_not_enable_recurring_messages(self):
         with tempfile.TemporaryDirectory() as tmp:
