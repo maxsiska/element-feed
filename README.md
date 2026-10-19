@@ -237,6 +237,16 @@ Changing a template does not edit messages already posted.
 
 ## Manual runs and testing
 
+An explicitly requested **one-off 15:30 test on 19 October 2026** is implemented
+in `.github/workflows/one-off-test.yml`. It is manually armed ahead of time and
+waits on a GitHub runner until 15:30 Europe/Berlin, then publishes exactly
+`15:30 test` through the existing feeds to subscribed rooms. It has no recurring
+trigger, rejects publication outside 15:30–15:35 that day, and reuses a fixed
+test entry ID on reruns. This is an exception to normal lunch publication,
+authorized for this test; it does not alter the daily schedule. Bot polling
+can delay the room message. This tests feed publication and delivery, not the
+external scheduler's clock.
+
 **Actions → Publish feed → Run workflow** includes a **dry_run** checkbox for
 safe previews. A dry run tests the code, generates a feed and saves a short-lived
 `feed-preview` artifact; it does not deploy to Pages or notify subscribed rooms.
@@ -348,7 +358,8 @@ The times and the weekdays are set by the single cron entry in
 entry to `'30 11 * * 1-3'` for a single attempt at 11:30 Monday–Wednesday.
 
 Ordinary manual runs also obey the weekday window. Use **dry_run** for previews
-outside it. No run can bypass `enabled: false` or create a unique test entry ID.
+outside it. No run can bypass `enabled: false`. The dated one-off test described
+above uses its own fixed ID; normal lunch runs cannot create unique test IDs.
 
 ## Caveats
 
