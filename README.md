@@ -4,14 +4,24 @@ Posts a daily message, such as a lunch invitation, to an Element (Matrix) room
 without running a server or holding a Matrix access token.
 
 ```text
-GitHub Actions (cron) → generate_feed.py → GitHub Pages → Coffee Bot → Element
+GitHub schedule ──────────┐
+Hosted scheduler (API) ───┴→ GitHub Actions → GitHub Pages → Coffee Bot → Element
 ```
 
-On weekdays at 11:50 Berlin time, a workflow publishes feeds that contain
-one item for today, allowing time for delivery before noon. This is a buffer,
-not a guaranteed delivery deadline. A feed bot that is already in your room (for example the
-university's Coffee Bot) picks it up and posts it. Colleagues reply with
-Element's normal emoji reactions.
+On weekdays at 11:20 Berlin time, a workflow publishes feeds that contain
+one item for today, with further attempts at 11:35 and 11:50 in case GitHub delays
+or drops a run. All attempts reuse the same daily entry ID. This allows time
+for delivery before noon, but does not guarantee a delivery deadline. A feed bot
+that is already in your room (for example the university's Coffee Bot) picks it
+up and posts it. Colleagues reply with Element's normal emoji reactions.
+
+An independent cron-job.org scheduler can also trigger the workflow at 11:25,
+11:40 and 11:55 Berlin time, bypassing GitHub's scheduled-event service. It needs
+the one-time setup below; committing the workflow alone does not activate it.
+Each run checks the live feed first and stops if today's invitation is already
+published. New invitations can only be published on weekdays from 11:15 until
+12:15 Berlin time. Runs that arrive later fail visibly instead of publishing a
+late lunch invitation. Disabling the feed is allowed at any time.
 
 The script writes both `feed.xml` (RSS) and `feed.json` (JSON Feed), with the same
 entry IDs, dates and content. Use JSON Feed for the custom collapsible labels
@@ -28,8 +38,11 @@ with **Beilagen & Dessert** nested inside **Mensa X Menu**.
 
 ## Avoiding duplicate invitations
 
-- There is one scheduled run: **11:50 Europe/Berlin, Monday–Friday**. There are
-  no backup runs; a missed or failed run can mean no invitation that day.
+- Publication is scheduled for **11:20, 11:35 and 11:50 Europe/Berlin,
+  Monday–Friday**. These attempts reuse one daily entry ID; missed or failed
+  runs have another chance before noon. After hosted setup, the independent
+  scheduler adds attempts at **11:25, 11:40 and 11:55**. If every attempt is
+  missed or fails, there will be no new invitation that day.
 - Every run uses the same `YYYY-MM-DD` entry ID and publication date for that
   Berlin day. Manual reruns, menu updates, and wording changes do not create
   another ID. The old unique test-message option has been removed.
@@ -56,6 +69,50 @@ an old workflow with unique test IDs to force another post in the live room.
 4. Invite Coffee Bot and subscribe it to that URL using the instructions below.
 5. Set `"enabled": true` in `config.json` and push. From the next scheduled run
    on, the bot posts the message every weekday.
+
+### Independent hosted scheduler (one-time setup)
+
+GitHub's scheduled events can be delayed or dropped. A cron-job.org job calls
+GitHub's `workflow_dispatch` API directly, so a missed GitHub cron event does
+not prevent publication. GitHub Actions execution, Pages and Coffee Bot remain
+dependencies; this is protection against the scheduler failure, not a guarantee
+against every service outage.
+
+1. Create or sign in to an account at <https://console.cron-job.org/>. In the
+   account settings, enable REST API access and create an API key.
+2. Create a **fine-grained** GitHub personal access token at
+   <https://github.com/settings/personal-access-tokens/new>, selecting only
+   `maxsiska/element-feed`, with **Actions: Read and write**. The automatically
+   included Metadata permission is sufficient for the other authenticated
+   requests. Choose an expiration date and record when to renew it.
+3. Deploy this repository's updated workflow, then run locally:
+
+   ```sh
+   python3 setup_hosted_scheduler.py --apply
+   ```
+
+The command prompts for both keys without displaying them or saving them to
+local files. The limited GitHub token is sent to cron-job.org and stored in the
+job so it can trigger this repository's workflow. Do not supply your general
+Git credential or paste either key into chat. Running the script without
+`--apply` only shows the planned configuration, with a placeholder token.
+
+The setup first runs a GitHub preview, then schedules a one-off external preview
+approximately two minutes ahead and waits for its successful GitHub run. Neither
+preview publishes a feed. Only after those checks succeed does it enable the
+weekday schedule. A failed test leaves the hosted job disabled. Rerunning setup
+updates the existing matching job, including when rotating an expiring token.
+
+The hosted job sends failure, recovery and automatic-disable notifications to
+the account email. These alerts cover the dispatch HTTP request. A successful
+dispatch means GitHub accepted the run, not that publication or Matrix delivery
+succeeded. The workflow separately verifies the public feed and reports failed
+publication in Actions; enable GitHub Actions failure notifications for this
+repository. Check the hosted job history if no GitHub run appears.
+
+For a fork, update `FEED_URL` in the workflow and `REPO` in the setup script.
+API references: [GitHub workflow dispatch](https://docs.github.com/en/rest/actions/workflows#create-a-workflow-dispatch-event)
+and [cron-job.org REST API](https://docs.cron-job.org/rest-api.html).
 
 ## Coffee Bot setup
 
@@ -121,12 +178,14 @@ After testing the formatting:
    matches the test room's ID.
 4. Commit and push `"enabled": true` in `config.json` to the default branch.
    No manual workflow run is needed: the next scheduled run publishes the invitation.
-   The workflow targets 11:50 Europe/Berlin Monday–Friday, with no backup runs.
-   The ten-minute buffer improves the chance of delivery by noon;
-   GitHub execution, Pages caching, and Coffee Bot polling may still delay it.
+   The workflow targets 11:20 Europe/Berlin Monday–Friday, with further attempts
+   at 11:35 and 11:50 that reuse the same daily entry ID. The earlier publication
+   and additional attempts improve the chance of delivery by noon; GitHub
+   execution, Pages caching, and Coffee Bot polling may still delay it.
 
-Once the intended room subscribes, a manual run can publish today's invitation
-there if that daily ID has not already been seen. Further runs reuse the same ID.
+Once the intended room subscribes, a manual run within the publication window
+can publish today's invitation if it is not already in the live feed. Further
+runs stop when today's entry is present and always reuse the same ID.
 For later formatting experiments, use a separate test feed. If the test room no longer
 needs daily posts, send `!coffee unsubscribe FEED_ID` in the **test room only**.
 
@@ -178,11 +237,16 @@ Changing a template does not edit messages already posted.
 
 ## Manual runs and testing
 
-**Actions → Publish feed → Run workflow** remains available, without a test
-checkbox. It uses the same configuration and daily entry ID as the scheduled run.
-With `enabled: false`, it publishes an empty feed. With `enabled: true`, it can
-publish today's invitation to every subscribed room if that daily ID is new.
-Running it again does not create a new ID or force Coffee Bot to resend the message.
+**Actions → Publish feed → Run workflow** includes a **dry_run** checkbox for
+safe previews. A dry run tests the code, generates a feed and saves a short-lived
+`feed-preview` artifact; it does not deploy to Pages or notify subscribed rooms.
+Dry runs are allowed at any time.
+
+An ordinary manual run uses the same configuration, daily entry ID, weekday
+window and live-feed check as a scheduled run. With `enabled: false`, it clears
+the feed when needed. With `enabled: true`, it can publish today's invitation
+to every subscribed room during the publication window. Running it again does
+not create a new ID or force Coffee Bot to resend the message.
 
 For testing without notifications, run the unit tests or generate the files
 locally; local generation does not publish anything. To test through Coffee Bot,
@@ -213,6 +277,35 @@ The desktop layout after opening the main section is:
 GitHub Pages caching and bot polling can delay delivery by ten minutes or longer.
 For an already-posted daily ID, menu or formatting changes will generally not
 produce another message; check the next day's entry instead.
+
+### A scheduled invitation did not arrive
+
+The reference `mensaplan2rss` checkout uses GitLab's `retry: 2`, allowing two
+retries after a job fails. This does not recover a scheduled trigger that never
+starts a job. Our three scheduled publication attempts also give a missed
+trigger another chance. Each run inspects the live feed and stops if today's
+entry is present; the daily ID also remains unchanged for bot deduplication.
+The reference project's schedule is configured separately in GitLab and has
+not been verified.
+
+1. Open the published `feed.json` and check its item's `id`. A normal invitation
+   uses today's Berlin date (`YYYY-MM-DD`). An older date or a `test-...` ID
+   means the feed has not yet been replaced by today's invitation.
+2. Check **Actions → Publish feed**. If today's run is absent, the scheduled
+   trigger has not produced a run; check that the workflow is active and its
+   schedule is on the default branch. GitHub can delay or drop scheduled runs.
+   If a run failed or is pending, inspect its generation and deployment steps.
+3. Each deployment checks the public feed for up to three minutes, allowing for
+   Pages caching. A mismatch or unreachable feed fails the workflow. If the feed
+   contains today's entry but the room has no invitation, check Coffee Bot's
+   subscription URL and polling status with its maintainer. Feed verification
+   does not confirm delivery in the room.
+
+A manual run before 12:15 can recover a missed publication, but it may send an
+invitation to every subscribed room. A missing feed after 12:15 produces a
+`MISSED PUBLICATION` failure without a new deployment. The workflow checks the
+time again immediately before deployment. It retains the daily ID and cannot
+force a resend of an entry the bot has already recorded.
 
 ## Configuration
 
@@ -248,22 +341,25 @@ or sample dishes. If dishes are available but no sides are listed, the nested
 section says so. A later run keeps the same daily ID, so a bot that already posted
 the invitation may not post a recovered menu. Disabled runs do not fetch the menu.
 
-The time and the weekdays are set by the single cron entry in
+The times and the weekdays are set by the single cron entry in
 [.github/workflows/publish.yml](.github/workflows/publish.yml):
-`'50 11 * * 1-5'` schedules 11:50 Monday–Friday. `timezone: Europe/Berlin`
-handles daylight saving time. For example, change the entry to `'30 11 * * 1-3'`
-to schedule 11:30 Monday–Wednesday.
+`'20,35,50 11 * * 1-5'` schedules 11:20, 11:35 and 11:50 Monday–Friday.
+`timezone: Europe/Berlin` handles daylight saving time. For example, change the
+entry to `'30 11 * * 1-3'` for a single attempt at 11:30 Monday–Wednesday.
 
-**Run workflow** can also publish on weekends, because it is an explicit manual
-execution. It always reuses the daily ID and cannot bypass `enabled: false`.
+Ordinary manual runs also obey the weekday window. Use **dry_run** for previews
+outside it. No run can bypass `enabled: false` or create a unique test entry ID.
 
 ## Caveats
 
-- GitHub's schedules can be delayed by several minutes. GitHub also disables
+- GitHub's schedules can be delayed by hours or dropped. GitHub also disables
   them after 60 days without repository activity; re-enable them in the
   Actions tab.
 - When the message actually appears also depends on how often the bot checks
   the feed.
+- The hosted scheduler must be configured separately, and its GitHub token
+  must be renewed before expiration. Its HTTP success alone is not delivery
+  confirmation.
 - Holidays are not skipped.
 
 ## Development

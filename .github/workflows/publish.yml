@@ -2,10 +2,16 @@ name: Publish feed
 
 on:
   schedule:
-    # One scheduled publication per weekday, at 11:50 Berlin time.
-    - cron: '50 11 * * 1-5'
+    # Three chances to publish before noon if GitHub delays or drops a run.
+    # Every attempt reuses the same daily entry ID for bot deduplication.
+    - cron: '20,35,50 11 * * 1-5'
       timezone: Europe/Berlin
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Validate and generate a preview without publishing or notifying rooms'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -16,10 +22,13 @@ concurrency:
   group: pages
   cancel-in-progress: false
 
+env:
+  FEED_URL: https://maxsiska.github.io/element-feed/feed.json
+
 jobs:
   publish:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -27,12 +36,35 @@ jobs:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
+      - name: Test the feed generator and publication safeguards
+        run: python3 -m unittest discover -s tests -v
+      - name: Check the publication window and live feed
+        id: plan
+        if: ${{ !inputs.dry_run }}
+        run: python3 publication.py plan --feed-url "$FEED_URL"
       - name: Generate feed
+        if: ${{ inputs.dry_run || steps.plan.outputs.publish == 'true' }}
         env:
           FEED_LINK: ${{ github.server_url }}/${{ github.repository }}
         run: python3 generate_feed.py --link "$FEED_LINK" public
+      - name: Save a preview for dry runs
+        if: ${{ inputs.dry_run }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: feed-preview
+          path: public/
+          retention-days: 3
       - uses: actions/upload-pages-artifact@v4
+        if: ${{ steps.plan.outputs.publish == 'true' }}
         with:
           path: public/
+      - name: Reject publication if the run became too late
+        if: ${{ steps.plan.outputs.publish == 'true' }}
+        run: python3 publication.py guard
       - id: deployment
+        if: ${{ steps.plan.outputs.publish == 'true' }}
         uses: actions/deploy-pages@v4
+        timeout-minutes: 2
+      - name: Verify the public feed
+        if: ${{ steps.plan.outputs.publish == 'true' }}
+        run: python3 publication.py verify --feed-url "$FEED_URL"
