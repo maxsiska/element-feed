@@ -1,0 +1,40 @@
+name: Initialize replacement lunch feed
+
+# Creates an unsubscribed baseline once; refuses to replace an existing feed.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  initialize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Test feed generation and migration safeguards
+        run: python3 -m unittest discover -s tests -v
+      - name: Prepare the new subscription baseline and preserve retired feeds
+        run: python3 initialize_lunch.py prepare
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: public/
+      - name: Refuse to overwrite an existing replacement feed
+        run: python3 initialize_lunch.py guard
+      - id: deployment
+        uses: actions/deploy-pages@v4
+        timeout-minutes: 2
+      - name: Verify the new baseline and unchanged retired feeds
+        run: python3 initialize_lunch.py verify

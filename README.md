@@ -23,7 +23,7 @@ published. New invitations can only be published on weekdays from 11:15 until
 12:15 Berlin time. Runs that arrive later fail visibly instead of publishing a
 late lunch invitation. Disabling the feed is allowed at any time.
 
-The script writes both `feed.xml` (RSS) and `feed.json` (JSON Feed), with the same
+The publisher writes both `lunch/feed.xml` (RSS) and `lunch/feed.json` (JSON Feed), with the same
 entry IDs, dates and content. Use JSON Feed for the custom collapsible labels
 with Coffee Bot; its RSS parser strips them. No workflow changes are needed to
 publish the additional file. The script has no dependencies beyond the Python
@@ -46,7 +46,7 @@ with **Beilagen & Dessert** nested inside **Mensa X Menu**.
 - Every run uses the same `YYYY-MM-DD` entry ID and publication date for that
   Berlin day. Manual reruns, menu updates, and wording changes do not create
   another ID. The old unique test-message option has been removed.
-- Keep only **one subscription** to this project in each room: `feed.json`.
+- Keep only **one subscription** to this project in the lunch room: `lunch/feed.json`.
   Check `!coffee subscriptions` and remove an old XML or alternate-URL
   subscription with `!coffee unsubscribe OLD_ID` in that room.
 - Use local previews or a separate feed subscribed only in a test room for
@@ -63,9 +63,9 @@ an old workflow with unique test IDs to force another post in the live room.
 
 1. Push this repository to GitHub.
 2. Under **Settings → Pages → Source**, choose **GitHub Actions**.
-3. Under **Actions → Publish feed**, click **Run workflow**. While `enabled` is
-   `false` in `config.json`, this publishes empty feeds at
-   `https://<account>.github.io/<repository>/feed.json` and `feed.xml`.
+3. The active JSON URL is
+   `https://maxsiska.github.io/element-feed/lunch/feed.json`.
+   The replacement feed is initialized once with a subscription baseline.
 4. Invite Coffee Bot and subscribe it to that URL using the instructions below.
 5. Set `"enabled": true` in `config.json` and push. From the next scheduled run
    on, the bot posts the message every weekday.
@@ -161,7 +161,7 @@ After testing the formatting:
 2. Send these commands as separate messages, using your public Pages URL:
 
    ```text
-   !coffee subscribe https://<account>.github.io/<repository>/feed.json
+   !coffee subscribe https://<account>.github.io/<repository>/lunch/feed.json
    !coffee subscriptions
    ```
 
@@ -218,7 +218,7 @@ variable. JSON Feed and the nested labels work on desktop in the test room.
 The upstream [RSS sanitizer](https://github.com/kurtmckee/feedparser/blob/develop/feedparser/sanitizer.py)
 strips `<summary>` but keeps `<details>`, causing generic **Details** labels.
 
-Subscribe the room to `feed.json`, set `!coffee template FEED_ID $summary`, and
+Subscribe the room to `lunch/feed.json`, set `!coffee template FEED_ID $summary`, and
 remove any existing `feed.xml` subscription from that same room. Use the ID
 shown by `!coffee subscriptions`. If the bot rejects JSON Feed, confirm support
 with its maintainer; do not keep both feed formats subscribed in the live room.
@@ -240,55 +240,59 @@ The university bot's installed version and read-only behavior are unverified.
 
 ## Manual runs and testing
 
-### Isolated diagnostic room
+### Replacement lunch feed and stopped diagnostics
 
-Use a new room with Coffee Bot and subscribe **only that room** to:
+The fresh production URL is:
 
 ```text
-!coffee subscribe https://maxsiska.github.io/element-feed/diagnostics/feed.json
+https://maxsiska.github.io/element-feed/lunch/feed.json
+```
+
+It uses the JSON Feed format that delivered successfully through diagnostic feed
+89, with the original lunch invitation and live menu from `config.json` and
+`generate_feed.py`. Coffee Bot assigns a new feed ID when first subscribing to
+this URL; 90 is expected but cannot be selected or guaranteed by this repository.
+
+In the **lunch room**, subscribe to the new URL and use the ID from the reply:
+
+```text
+!coffee subscribe https://maxsiska.github.io/element-feed/lunch/feed.json
+!coffee template NEW_ID $summary
+!coffee notice NEW_ID false
+```
+
+The template command sends a generic sample. After confirming the new
+subscription and readable sample, remove the retired subscriptions **in the lunch
+room only**:
+
+```text
+!coffee unsubscribe 88
+!coffee unsubscribe 89
 !coffee subscriptions
 ```
 
-Use the new diagnostic subscription ID (not production ID 88), then set
-`!coffee template ID $summary`. This sends a generic sample message immediately
-and separates command
-handling and Matrix delivery from automatic feed polling. The upstream plugin
-records existing entries when a new feed is first subscribed, so the initial
-setup baseline is not a delivery test.
+The final list should contain the new lunch feed and no retired subscriptions
+from this project. The Element subscription and actual assigned ID must be
+confirmed by the user; publishing this change alone does not switch the room.
 
-Once subscription is confirmed, append a new entry to `diagnostics/feed.json`
-with a unique `diagnostic:` ID, a UTC publication date, and a simple test message.
-Commit it, then run **Actions → Publish isolated diagnostic feed**. Record both
-the verified publication time and the time its message appears in the room.
-Retain earlier diagnostic entries so slow polling cannot skip an experiment.
-Rerunning a deployment with the same file retains its IDs and should not resend.
+Both diagnostic publishing workflows were disabled and removed after the user
+confirmed that the 16:30 test also succeeded. No further room tests are scheduled.
+The retired root feeds (88) and diagnostic feed (89) are frozen byte for byte in
+`static/` and included in every deployment. They receive no new entries. Their
+old scripts remain only as historical utilities and are not used by a publisher.
 
-For a timed comparison, give **Publish isolated diagnostic feed** a `publish_at`
-value such as `2026-10-19T16:25:00+02:00`. Arm it no more than twenty minutes
-ahead. The cloud runner waits until that time and rejects deployment five minutes
-later. Diagnostic entries with a future `date_published` remain excluded from
-all deployments until their own time arrives. This checks publication timing
-and bot delivery, not GitHub's cron service or the hosted scheduler's clock.
+**Initialize replacement lunch feed** is a manual, one-time deployment that
+creates the new URL with a `lunch-setup:YYYY-MM-DD` subscription baseline. It
+refuses to overwrite any existing replacement feed, rejects network errors,
+and checks that the retired feeds still match their snapshots before deployment.
+The baseline retains the normal lunch message and menu; it is not a timed test.
+The matching upstream bot records pre-existing entries on first subscription.
+Normal weekday publications replace the baseline with the next daily invitation.
 
-On 19 October, the user also subscribed the **lunch room** to diagnostic feed 89
-and confirmed a readable `$summary` sample there. Two comparison entries were
-published at **16:25:09 and 16:30:09 Berlin**, and the user reported that the test
-succeeded in both rooms. Individual arrival timestamps were not recorded. The
-lunch feed (88) remains unchanged. Future diagnostic publications also reach the
-lunch room until feed 89 is unsubscribed **in that room** after the comparison.
-
-The diagnostic workflow copies both currently published lunch feeds byte for
-byte, checks they still match before deployment, and verifies all three public
-files afterward. Every Pages workflow includes the committed diagnostic feed
-and shares the same deployment lock. Tests therefore have their own URL and IDs
-and do not create entries in the lunch feed. They have no recurring schedule.
-
-The matching upstream [maubot/rss configuration](https://github.com/maubot/rss/blob/master/base-config.yaml)
-defaults to a 60-minute polling interval. The university's actual interval and
-plugin version are unverified. GitHub Pages caching can add delay; successful
-publication does not prove delivery. If a subscribed test fails to arrive, ask
-the maintainer for the diagnostic feed's polling interval, last fetch result,
-and Matrix send errors rather than repeatedly resetting its subscription.
+**Publish feed** now updates only `lunch/feed.json` and `lunch/feed.xml`. It keeps
+the 11:20, 11:35 and 11:50 weekday attempts, publication cutoff and daily IDs.
+An already-configured hosted scheduler still dispatches `publish.yml`; no
+scheduler token or job URL change is needed for this feed migration.
 
 ### Diagnostic observations on 19 October 2026
 
@@ -315,8 +319,9 @@ updates from feed 89. It supports investigating feed 88's settings or entry
 history, but does not prove that feed 88 remains broken after the template was
 explicitly reset. A fresh entry through 88 or the operator's logs would be
 needed to distinguish a current feed problem from a historical missed entry.
-Regular lunch invitations still use feed 88; no production migration has been
-made. These diagnostic tests alone do not confirm tomorrow's lunch delivery.
+The publisher now targets the fresh lunch URL described above; the room must
+subscribe to it before it can receive future invitations. These diagnostic
+tests alone do not confirm tomorrow's lunch delivery.
 
 The lunch feed was preserved byte for byte through diagnostic deployments.
 The missed entry's ID is `scheduled-test:2026-10-19T13:30:00+00:00`. To diagnose
@@ -328,17 +333,10 @@ retrying the individual delivery. That could leave a failed delivery marked as
 seen, but neither this cause nor the university's implementation is confirmed.
 Do not infer that changing the publisher schedule alone fixes such a failure.
 
-### Dated test on the original feed
+### Local previews
 
-An explicitly requested **one-off 15:30 test on 19 October 2026** is implemented
-in `.github/workflows/one-off-test.yml`. It is manually armed ahead of time and
-waits on a GitHub runner until 15:30 Europe/Berlin, then publishes exactly
-`15:30 test` through the existing feeds to subscribed rooms. It has no recurring
-trigger, rejects publication outside 15:30–15:35 that day, and reuses a fixed
-test entry ID on reruns. This is an exception to normal lunch publication,
-authorized for this test; it does not alter the daily schedule. Bot polling
-can delay the room message. This tests feed publication and delivery, not the
-external scheduler's clock.
+The dated 15:30 and later diagnostic publishers have been retired. The
+non-publishing preview below remains available for checking code and menus.
 
 **Actions → Publish feed → Run workflow** includes a **dry_run** checkbox for
 safe previews. A dry run tests the code, generates a feed and saves a short-lived
@@ -391,7 +389,7 @@ entry is present; the daily ID also remains unchanged for bot deduplication.
 The reference project's schedule is configured separately in GitLab and has
 not been verified.
 
-1. Open the published `feed.json` and check its item's `id`. A normal invitation
+1. Open the published `lunch/feed.json` and check its item's `id`. A normal invitation
    uses today's Berlin date (`YYYY-MM-DD`). An older date or a `test-...` ID
    means the feed has not yet been replaced by today's invitation.
 2. Check **Actions → Publish feed**. If today's run is absent, the scheduled
@@ -451,8 +449,9 @@ The times and the weekdays are set by the single cron entry in
 entry to `'30 11 * * 1-3'` for a single attempt at 11:30 Monday–Wednesday.
 
 Ordinary manual runs also obey the weekday window. Use **dry_run** for previews
-outside it. No run can bypass `enabled: false`. The dated one-off test described
-above uses its own fixed ID; normal lunch runs cannot create unique test IDs.
+outside it. No run can bypass `enabled: false`. The initialization workflow can
+only create a previously absent replacement URL; it cannot reset an existing
+subscription or force a resend.
 
 ## Caveats
 
@@ -470,7 +469,8 @@ above uses its own fixed ID; normal lunch runs cannot create unique test IDs.
 
 ```sh
 python3 -m unittest discover -s tests -v
-python3 generate_feed.py   # writes public/feed.xml and public/feed.json
+python3 generate_feed.py public/lunch   # active lunch feeds
+cp -R static/. public/                  # unchanged retired feeds
 ```
 
 Tests use a small HTML fixture modeled on the official page, including its

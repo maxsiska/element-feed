@@ -23,7 +23,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  FEED_URL: https://maxsiska.github.io/element-feed/feed.json
+  FEED_URL: https://maxsiska.github.io/element-feed/lunch/feed.json
 
 jobs:
   publish:
@@ -46,10 +46,10 @@ jobs:
         if: ${{ inputs.dry_run || steps.plan.outputs.publish == 'true' }}
         env:
           FEED_LINK: ${{ github.server_url }}/${{ github.repository }}
-        run: python3 generate_feed.py --link "$FEED_LINK" public
-      - name: Include the separate diagnostic feed
+        run: python3 generate_feed.py --link "$FEED_LINK" public/lunch
+      - name: Preserve the retired feeds without new entries
         if: ${{ inputs.dry_run || steps.plan.outputs.publish == 'true' }}
-        run: python3 diagnostics.py bundle
+        run: cp -R static/. public/
       - name: Save a preview for dry runs
         if: ${{ inputs.dry_run }}
         uses: actions/upload-artifact@v4
@@ -63,11 +63,11 @@ jobs:
           path: public/
       - name: Reject publication if the run became too late
         if: ${{ steps.plan.outputs.publish == 'true' }}
-        run: python3 publication.py guard
+        run: python3 publication.py guard --expected public/lunch/feed.json
       - id: deployment
         if: ${{ steps.plan.outputs.publish == 'true' }}
         uses: actions/deploy-pages@v4
         timeout-minutes: 2
       - name: Verify the public feed
         if: ${{ steps.plan.outputs.publish == 'true' }}
-        run: python3 publication.py verify --feed-url "$FEED_URL"
+        run: python3 publication.py verify --feed-url "$FEED_URL" --expected public/lunch/feed.json

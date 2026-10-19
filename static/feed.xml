@@ -1,0 +1,14 @@
+<?xml version='1.0' encoding='utf-8'?>
+<rss version="2.0">
+  <channel>
+    <title>Lunch at Uni Bielefeld</title>
+    <description>Weekday lunch invitations for colleagues at Uni Bielefeld.</description>
+    <link>https://github.com/maxsiska/element-feed</link>
+    <item>
+      <title>15:30 test</title>
+      <description>15:30 test</description>
+      <guid isPermaLink="false">scheduled-test:2026-10-19T13:30:00+00:00</guid>
+      <pubDate>Mon, 19 Oct 2026 13:30:00 +0000</pubDate>
+    </item>
+  </channel>
+</rss>

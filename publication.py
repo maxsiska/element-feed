@@ -93,7 +93,7 @@ def main(argv=None):
     parser.add_argument("command", choices=("plan", "guard", "verify"))
     parser.add_argument("--feed-url")
     parser.add_argument("--config", type=Path, default=Path("config.json"))
-    parser.add_argument("--expected", type=Path, default=Path("public/feed.json"))
+    parser.add_argument("--expected", type=Path, default=Path("public/lunch/feed.json"))
     args = parser.parse_args(argv)
     if args.command in ("plan", "verify") and not args.feed_url:
         parser.error("--feed-url is required for plan and verify")
