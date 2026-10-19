@@ -5,6 +5,18 @@
   "description": "Manual experiments for the dedicated test room only.",
   "items": [
     {
+      "id": "diagnostic:2026-10-19:rooms-1630",
+      "title": "16:30 test — feed 89",
+      "content_html": "16:30 test — feed 89",
+      "date_published": "2026-10-19T16:30:00+02:00"
+    },
+    {
+      "id": "diagnostic:2026-10-19:rooms-1625",
+      "title": "16:25 test — feed 89",
+      "content_html": "16:25 test — feed 89",
+      "date_published": "2026-10-19T16:25:00+02:00"
+    },
+    {
       "id": "diagnostic:2026-10-19:poll-2",
       "title": "Test 2: polling recheck",
       "content_html": "Test 2: polling recheck",

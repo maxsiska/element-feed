@@ -17,7 +17,8 @@ class DiagnosticTests(unittest.TestCase):
         self.source = Path(self.tmp.name) / "diagnostic.json"
         self.source.write_text(json.dumps({
             "version": "https://jsonfeed.org/version/1.1", "title": "Diagnostics",
-            "items": [{"id": "diagnostic:baseline", "content_html": "Setup"}]}))
+            "items": [{"id": "diagnostic:baseline", "content_html": "Setup",
+                       "date_published": "2026-10-19T13:40:00+00:00"}]}))
         xml, data = build_test({"title": "Lunch", "description": "Daily lunch"},
                                datetime(2026, 10, 19, 13, 30, tzinfo=timezone.utc),
                                "15:30 test", "https://example.org")
@@ -29,8 +30,8 @@ class DiagnosticTests(unittest.TestCase):
             diagnostics.guard(self.output)
         for path, content in self.live.items():
             self.assertEqual((self.output / path).read_bytes(), content)
-        self.assertEqual((self.output / diagnostics.DIAGNOSTIC).read_bytes(),
-                         self.source.read_bytes())
+        self.assertEqual(json.loads((self.output / diagnostics.DIAGNOSTIC).read_bytes()),
+                         json.loads(self.source.read_bytes()))
 
     def test_download_failure_or_mixed_versions_never_creates_output(self):
         mixed = json.loads(self.live["feed.json"])
@@ -64,6 +65,35 @@ class DiagnosticTests(unittest.TestCase):
             self.source.write_text(json.dumps(original))
             with self.subTest(ids=ids), self.assertRaises(ValueError):
                 diagnostics.bundle(self.output, self.source)
+        self.assertFalse(self.output.exists())
+
+
+    def test_scheduled_entries_are_released_only_at_their_own_times(self):
+        feed = json.loads(self.source.read_text())
+        for minute in (30, 25):
+            feed['items'].insert(0, {
+                'id': f'diagnostic:comparison:{minute}',
+                'content_html': f'16:{minute} test',
+                'date_published': f'2026-10-19T16:{minute}:00+02:00'})
+        self.source.write_text(json.dumps(feed))
+        for moment, expected in (
+            ('2026-10-19T14:24:59+00:00', ['diagnostic:baseline']),
+            ('2026-10-19T14:25:00+00:00', ['diagnostic:comparison:25', 'diagnostic:baseline']),
+            ('2026-10-19T14:30:00+00:00', ['diagnostic:comparison:25', 'diagnostic:comparison:30',
+                                        'diagnostic:baseline']),
+        ):
+            with self.subTest(moment=moment):
+                diagnostics.bundle(self.output, self.source, datetime.fromisoformat(moment))
+                actual = json.loads((self.output / diagnostics.DIAGNOSTIC).read_text())
+                self.assertEqual([item['id'] for item in actual['items']], expected)
+        self.assertEqual(json.loads(self.source.read_text()), feed)
+
+    def test_ambiguous_scheduled_time_is_rejected_before_writing(self):
+        feed = json.loads(self.source.read_text())
+        feed['items'][0]['date_published'] = '2026-10-19T16:25:00'
+        self.source.write_text(json.dumps(feed))
+        with self.assertRaisesRegex(ValueError, 'UTC offset'):
+            diagnostics.bundle(self.output, self.source)
         self.assertFalse(self.output.exists())
 
 

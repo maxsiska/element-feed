@@ -263,6 +263,19 @@ the verified publication time and the time its message appears in the room.
 Retain earlier diagnostic entries so slow polling cannot skip an experiment.
 Rerunning a deployment with the same file retains its IDs and should not resend.
 
+For a timed comparison, give **Publish isolated diagnostic feed** a `publish_at`
+value such as `2026-10-19T16:25:00+02:00`. Arm it no more than twenty minutes
+ahead. The cloud runner waits until that time and rejects deployment five minutes
+later. Diagnostic entries with a future `date_published` remain excluded from
+all deployments until their own time arrives. This checks publication timing
+and bot delivery, not GitHub's cron service or the hosted scheduler's clock.
+
+On 19 October, the user also subscribed the **lunch room** to diagnostic feed 89
+and confirmed a readable `$summary` sample there. Two comparison entries are
+scheduled for **16:25 and 16:30 Berlin**. They are intended for both rooms; the
+lunch feed (88) remains unchanged. Future diagnostic publications also reach the
+lunch room until feed 89 is unsubscribed **in that room** after the comparison.
+
 The diagnostic workflow copies both currently published lunch feeds byte for
 byte, checks they still match before deployment, and verifies all three public
 files afterward. Every Pages workflow includes the committed diagnostic feed

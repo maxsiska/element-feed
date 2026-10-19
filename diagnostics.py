@@ -1,9 +1,9 @@
 """Publish a separate test feed while preserving the current lunch feeds."""
 
 import argparse
+from datetime import datetime, timezone
 import json
 from pathlib import Path
-import shutil
 import ssl
 import sys
 import time
@@ -12,6 +12,7 @@ from uuid import uuid4
 import xml.etree.ElementTree as ET
 
 from generate_feed import build_json_feed
+from scheduled_test import parse_time
 
 
 BASE_URL = "https://maxsiska.github.io/element-feed"
@@ -42,11 +43,19 @@ def validate_diagnostic(source):
     return feed
 
 
-def bundle(output, source):
-    validate_diagnostic(source)
+def bundle(output, source, now=None):
+    feed = validate_diagnostic(source)
+    now = now or datetime.now(timezone.utc)
+    # Keep future appointments out of every deployment, including ordinary
+    # lunch publications and manual previews of this diagnostic feed.
+    feed["items"] = [item for item in feed["items"]
+                     if parse_time(item["date_published"]) <= now]
+    if not feed["items"]:
+        raise ValueError("No published diagnostic baseline is available yet.")
     destination = output / DIAGNOSTIC
     destination.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(source, destination)
+    destination.write_text(json.dumps(feed, ensure_ascii=False, indent=2) + "\n",
+                           encoding="utf-8")
 
 
 def prepare(output, source):
