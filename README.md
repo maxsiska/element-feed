@@ -250,15 +250,16 @@ https://maxsiska.github.io/element-feed/lunch/feed.json
 
 It uses the JSON Feed format that delivered successfully through diagnostic feed
 89, with the original lunch invitation and live menu from `config.json` and
-`generate_feed.py`. Coffee Bot assigns a new feed ID when first subscribing to
-this URL; 90 is expected but cannot be selected or guaranteed by this repository.
+`generate_feed.py`. The user confirmed that Coffee Bot assigned **feed ID 90**
+when subscribing the lunch room on 19 October. IDs are assigned by Coffee Bot,
+not selected by this repository.
 
-In the **lunch room**, subscribe to the new URL and use the ID from the reply:
+In the **lunch room**, the migration commands are:
 
 ```text
 !coffee subscribe https://maxsiska.github.io/element-feed/lunch/feed.json
-!coffee template NEW_ID $summary
-!coffee notice NEW_ID false
+!coffee template 90 $summary
+!coffee notice 90 false
 ```
 
 The template command sends a generic sample. After confirming the new
@@ -272,8 +273,9 @@ room only**:
 ```
 
 The final list should contain the new lunch feed and no retired subscriptions
-from this project. The Element subscription and actual assigned ID must be
-confirmed by the user; publishing this change alone does not switch the room.
+from this project. The user has confirmed the new subscription and ID. The final
+formatting and removal of the retired subscriptions still require confirmation
+in Element.
 
 Both diagnostic publishing workflows were disabled and removed after the user
 confirmed that the 16:30 test also succeeded. No further room tests are scheduled.
@@ -288,6 +290,13 @@ and checks that the retired feeds still match their snapshots before deployment.
 The baseline retains the normal lunch message and menu; it is not a timed test.
 The matching upstream bot records pre-existing entries on first subscription.
 Normal weekday publications replace the baseline with the next daily invitation.
+
+The [initialization deployment](https://github.com/maxsiska/element-feed/actions/runs/39271369992)
+succeeded, and all 49 code checks passed locally and in GitHub Actions. The
+replacement JSON and RSS match; the three retired public files match their
+snapshots byte for byte. The first regular publication after migration is
+scheduled for 20 October at 11:20 Europe/Berlin. Delivery in Element remains
+dependent on Coffee Bot polling.
 
 **Publish feed** now updates only `lunch/feed.json` and `lunch/feed.xml`. It keeps
 the 11:20, 11:35 and 11:50 weekday attempts, publication cutoff and daily IDs.
