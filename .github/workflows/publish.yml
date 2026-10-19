@@ -47,6 +47,9 @@ jobs:
         env:
           FEED_LINK: ${{ github.server_url }}/${{ github.repository }}
         run: python3 generate_feed.py --link "$FEED_LINK" public
+      - name: Include the separate diagnostic feed
+        if: ${{ inputs.dry_run || steps.plan.outputs.publish == 'true' }}
+        run: python3 diagnostics.py bundle
       - name: Save a preview for dry runs
         if: ${{ inputs.dry_run }}
         uses: actions/upload-artifact@v4

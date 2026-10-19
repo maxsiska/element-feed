@@ -237,6 +237,44 @@ Changing a template does not edit messages already posted.
 
 ## Manual runs and testing
 
+### Isolated diagnostic room
+
+Use a new room with Coffee Bot and subscribe **only that room** to:
+
+```text
+!coffee subscribe https://maxsiska.github.io/element-feed/diagnostics/feed.json
+!coffee subscriptions
+```
+
+Use the new diagnostic subscription ID (not production ID 88). Inspect the
+template with `!coffee template ID`, then set `!coffee template ID $summary`.
+The latter sends a generic sample message immediately. This separates command
+handling and Matrix delivery from automatic feed polling. The upstream plugin
+records existing entries when a new feed is first subscribed, so the initial
+setup baseline is not a delivery test.
+
+Once subscription is confirmed, append a new entry to `diagnostics/feed.json`
+with a unique `diagnostic:` ID, a UTC publication date, and a simple test message.
+Commit it, then run **Actions → Publish isolated diagnostic feed**. Record both
+the verified publication time and the time its message appears in the room.
+Retain earlier diagnostic entries so slow polling cannot skip an experiment.
+Rerunning a deployment with the same file retains its IDs and should not resend.
+
+The diagnostic workflow copies both currently published lunch feeds byte for
+byte, checks they still match before deployment, and verifies all three public
+files afterward. Every Pages workflow includes the committed diagnostic feed
+and shares the same deployment lock. Tests therefore have their own URL and IDs
+and do not create entries in the lunch feed. They have no recurring schedule.
+
+The matching upstream [maubot/rss configuration](https://github.com/maubot/rss/blob/master/base-config.yaml)
+defaults to a 60-minute polling interval. The university's actual interval and
+plugin version are unverified. GitHub Pages caching can add delay; successful
+publication does not prove delivery. If a subscribed test fails to arrive, ask
+the maintainer for the diagnostic feed's polling interval, last fetch result,
+and Matrix send errors rather than repeatedly resetting its subscription.
+
+### Dated test on the original feed
+
 An explicitly requested **one-off 15:30 test on 19 October 2026** is implemented
 in `.github/workflows/one-off-test.yml`. It is manually armed ahead of time and
 waits on a GitHub runner until 15:30 Europe/Berlin, then publishes exactly

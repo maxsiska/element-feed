@@ -33,6 +33,8 @@ jobs:
         run: python3 -m unittest discover -s tests -v
       - name: Wait until 15:30 Berlin and prepare the test message
         run: python3 scheduled_test.py generate --at "$TEST_AT" --message "$TEST_MESSAGE"
+      - name: Include the separate diagnostic feed
+        run: python3 diagnostics.py bundle
       - uses: actions/upload-pages-artifact@v4
         with:
           path: public/

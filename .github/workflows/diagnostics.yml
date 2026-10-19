@@ -1,0 +1,40 @@
+name: Publish isolated diagnostic feed
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# All Pages publishers share this lock because a deployment replaces the site.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Test feed isolation
+        run: python3 -m unittest discover -s tests -v
+      - name: Prepare diagnostics and preserve the current lunch feeds
+        run: python3 diagnostics.py prepare
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: public/
+      - name: Confirm the lunch feeds have not changed
+        run: python3 diagnostics.py guard
+      - id: deployment
+        uses: actions/deploy-pages@v4
+        timeout-minutes: 2
+      - name: Verify diagnostics and unchanged lunch feeds
+        run: python3 diagnostics.py verify
