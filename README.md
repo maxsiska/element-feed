@@ -271,8 +271,9 @@ all deployments until their own time arrives. This checks publication timing
 and bot delivery, not GitHub's cron service or the hosted scheduler's clock.
 
 On 19 October, the user also subscribed the **lunch room** to diagnostic feed 89
-and confirmed a readable `$summary` sample there. Two comparison entries are
-scheduled for **16:25 and 16:30 Berlin**. They are intended for both rooms; the
+and confirmed a readable `$summary` sample there. Two comparison entries were
+published at **16:25:09 and 16:30:09 Berlin**, and the user reported that the test
+succeeded in both rooms. Individual arrival timestamps were not recorded. The
 lunch feed (88) remains unchanged. Future diagnostic publications also reach the
 lunch room until feed 89 is unsubscribed **in that room** after the comparison.
 
@@ -299,6 +300,7 @@ Actions; room delivery observations were reported by the user.
 | 88, lunch feed | `15:30 test` | 15:31:05 | Reported missing; no later delivery confirmation |
 | 89, diagnostic feed | `Test 1: automatic feed delivery` | 15:48:16 | Received at 15:49, minute precision |
 | 89, diagnostic feed | `Test 2: polling recheck` | 15:57:18 | Received; exact arrival time not recorded |
+| 89, diagnostic feed | 16:25 / 16:30 comparison | 16:25:09 / 16:30:09 | Comparison reported successful in both rooms; individual arrival times not recorded |
 
 The diagnostic subscription successfully fetched the feed on setup. Both rooms
 displayed readable sample messages after explicitly setting `$summary`, and the
@@ -307,6 +309,14 @@ the correct JSON URL. A missing read marker was therefore not evidence that the
 bot had stopped responding. The original template before the explicit reset is
 unknown. Duplicate suppression and the actual polling interval have not been
 confirmed by these observations.
+
+The successful comparison shows that the lunch room can receive automatic
+updates from feed 89. It supports investigating feed 88's settings or entry
+history, but does not prove that feed 88 remains broken after the template was
+explicitly reset. A fresh entry through 88 or the operator's logs would be
+needed to distinguish a current feed problem from a historical missed entry.
+Regular lunch invitations still use feed 88; no production migration has been
+made. These diagnostic tests alone do not confirm tomorrow's lunch delivery.
 
 The lunch feed was preserved byte for byte through diagnostic deployments.
 The missed entry's ID is `scheduled-test:2026-10-19T13:30:00+00:00`. To diagnose
