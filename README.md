@@ -225,15 +225,18 @@ with its maintainer; do not keep both feed formats subscribed in the live room.
 If an empty feed is rejected during initial setup, enable it and publish a daily
 entry while it is subscribed only in the test room, then retry subscribing.
 
-If only the invitation title/link appears, inspect the room's current template:
+If only the invitation title/link appears, explicitly set the intended template:
 
 ```text
-!coffee template FEED_ID
+!coffee template FEED_ID $summary
 ```
 
 The desired template is the literal `$summary`. Setting a template sends a
 **generic sample message**, so do formatting experiments in a separate test room.
 Changing a template does not edit messages already posted.
+Do not rely on an omitted template argument as a read-only inspection command:
+during the 19 October checks, the reported reply was an update confirmation.
+The university bot's installed version and read-only behavior are unverified.
 
 ## Manual runs and testing
 
@@ -246,9 +249,9 @@ Use a new room with Coffee Bot and subscribe **only that room** to:
 !coffee subscriptions
 ```
 
-Use the new diagnostic subscription ID (not production ID 88). Inspect the
-template with `!coffee template ID`, then set `!coffee template ID $summary`.
-The latter sends a generic sample message immediately. This separates command
+Use the new diagnostic subscription ID (not production ID 88), then set
+`!coffee template ID $summary`. This sends a generic sample message immediately
+and separates command
 handling and Matrix delivery from automatic feed polling. The upstream plugin
 records existing entries when a new feed is first subscribed, so the initial
 setup baseline is not a delivery test.
@@ -272,6 +275,35 @@ plugin version are unverified. GitHub Pages caching can add delay; successful
 publication does not prove delivery. If a subscribed test fails to arrive, ask
 the maintainer for the diagnostic feed's polling interval, last fetch result,
 and Matrix send errors rather than repeatedly resetting its subscription.
+
+### Diagnostic observations on 19 October 2026
+
+All times below are Europe/Berlin. Publication times are verified by GitHub
+Actions; room delivery observations were reported by the user.
+
+| Feed | Entry | Verified publication | Room delivery |
+| --- | --- | --- | --- |
+| 88, lunch feed | `15:30 test` | 15:31:05 | Reported missing; no later delivery confirmation |
+| 89, diagnostic feed | `Test 1: automatic feed delivery` | 15:48:16 | Received at 15:49, minute precision |
+| 89, diagnostic feed | `Test 2: polling recheck` | 15:57:18 | Received; exact arrival time not recorded |
+
+The diagnostic subscription successfully fetched the feed on setup. Both rooms
+displayed readable sample messages after explicitly setting `$summary`, and the
+original room subsequently replied to `!coffee subscriptions` with feed 88 and
+the correct JSON URL. A missing read marker was therefore not evidence that the
+bot had stopped responding. The original template before the explicit reset is
+unknown. Duplicate suppression and the actual polling interval have not been
+confirmed by these observations.
+
+The lunch feed was preserved byte for byte through diagnostic deployments.
+The missed entry's ID is `scheduled-test:2026-10-19T13:30:00+00:00`. To diagnose
+that historical miss, the bot operator should check feed 88's fetch/backoff
+history, the stored entry record for that ID, and any Matrix send errors after
+15:31. The matching [upstream implementation](https://github.com/maubot/rss/blob/master/rss/bot.py)
+records new entries before broadcasting them and logs send failures without
+retrying the individual delivery. That could leave a failed delivery marked as
+seen, but neither this cause nor the university's implementation is confirmed.
+Do not infer that changing the publisher schedule alone fixes such a failure.
 
 ### Dated test on the original feed
 
