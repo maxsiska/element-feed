@@ -5,6 +5,12 @@
   "description": "Manual experiments for the dedicated test room only.",
   "items": [
     {
+      "id": "diagnostic:2026-10-19:poll-1",
+      "title": "Test 1: automatic feed delivery",
+      "content_html": "Test 1: automatic feed delivery",
+      "date_published": "2026-10-19T13:47:00+00:00"
+    },
+    {
       "id": "diagnostic:2026-10-19:baseline",
       "title": "Diagnostic setup baseline",
       "content_html": "Diagnostic setup baseline. The first delivery test will be added after this room subscribes.",
