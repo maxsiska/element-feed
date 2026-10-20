@@ -141,7 +141,8 @@ class FeedTests(unittest.TestCase):
         # explicit breaks, not the rendering of a particular Element version.
         for line_break in html.iter("br"):
             line_break.text = "\n"
-        fallback = "".join(html.itertext())
+        # Ignore the zero-width word joiners that protect these breaks on iOS.
+        fallback = "".join(html.itertext()).replace("\u2060", "")
         self.assertIn("Mensa X Menu\n\n" + MENU.mains[0], fallback)
         self.assertIn("Beilagen & Dessert\n\n" + MENU.sides[0], fallback)
         lines = [line.strip() for line in fallback.splitlines() if line.strip()]

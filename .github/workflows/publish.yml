@@ -31,7 +31,7 @@ jobs:
     timeout-minutes: 10
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      url: ${{ steps.deployment.outputs.page_url || steps.deployment_retry.outputs.page_url }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -66,6 +66,17 @@ jobs:
         run: python3 publication.py guard --expected public/lunch/feed.json
       - id: deployment
         if: ${{ steps.plan.outputs.publish == 'true' }}
+        uses: actions/deploy-pages@v4
+        timeout-minutes: 2
+        continue-on-error: true
+      - name: Wait briefly and recheck the deadline before retrying deployment
+        if: ${{ steps.plan.outputs.publish == 'true' && steps.deployment.outcome == 'failure' }}
+        run: |
+          sleep 15
+          python3 publication.py guard --expected public/lunch/feed.json
+      - id: deployment_retry
+        name: Retry the same Pages artifact once
+        if: ${{ steps.plan.outputs.publish == 'true' && steps.deployment.outcome == 'failure' }}
         uses: actions/deploy-pages@v4
         timeout-minutes: 2
       - name: Verify the public feed

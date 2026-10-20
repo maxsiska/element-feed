@@ -37,14 +37,18 @@ def build_feed(config, today, link, menu=None):
         # RSS descriptions contain HTML encoded as XML text. Escape the plain
         # message first, then add today's menu (keep the title plain).
         description = f"<h3>{escape(config['message'])}</h3>"
-        description += "\n<details><summary>Mensa X Menu</summary><br /><br />"
+        # Element Classic's DTCoreText renderer flattens unsupported <details>.
+        # A word joiner (U+2060) protects the preceding hard breaks from being
+        # trimmed before the following block/list and normalized to a space.
+        # It has no visible width and stays inside the desktop's collapsed body.
+        description += "\n<details><summary>Mensa X Menu</summary><br /><br />&#8288;"
         if menu is None:
             description += "<p>Today's menu is currently unavailable.</p>"
         else:
             sides = dish_list(menu.sides) if menu.sides else "<p>No side dishes listed for today.</p>"
             description += (
                 f"{dish_list(menu.mains)}<br />"
-                "<details><summary>Beilagen &amp; Dessert</summary><br /><br />"
+                "<details><summary>Beilagen &amp; Dessert</summary><br /><br />&#8288;"
                 f"{sides}</details>"
             )
         description += "</details>"

@@ -273,9 +273,10 @@ room only**:
 ```
 
 The final list should contain the new lunch feed and no retired subscriptions
-from this project. The user has confirmed the new subscription and ID. The final
-formatting and removal of the retired subscriptions still require confirmation
-in Element.
+from this project. The user confirmed the new subscription and ID, subsequently
+reported that the notice command worked, and confirmed receipt of the regular
+20 October invitation with correct desktop formatting. Removal of the retired
+subscriptions has not been explicitly confirmed.
 
 Both diagnostic publishing workflows were disabled and removed after the user
 confirmed that the 16:30 test also succeeded. No further room tests are scheduled.
@@ -373,7 +374,19 @@ Element Classic on iOS displays the menu expanded because it does not support
 these collapsible sections. The invitation's heading provides its own line;
 explicit `<br />` breaks separate section labels and dishes, with a blank line
 before the first dish in each section and an extra break before **Beilagen & Dessert**.
-The browser preview cannot verify Element Classic's rendering.
+A zero-width word joiner (`&#8288;`, U+2060) follows each header's breaks inside
+the collapsed body. This keeps DTCoreText from trimming those breaks at the list
+boundary and replacing them with an ordinary space when Element flattens
+`details`. The desktop labels, nested sections, and semantic lists are preserved.
+
+On 20 October, a local check using DTCoreText 1.6.26 and Element Classic's
+unsupported-tag sanitization reproduced the reported header/first-bullet problem
+and verified that the protected breaks put both lists below their headers.
+The matching [Element sanitizer](https://github.com/element-hq/element-ios/blob/master/Riot/Modules/MatrixKit/Categories/DTHTMLElement%2BMatrixKit.swift)
+and [DTCoreText list-boundary handling](https://github.com/Cocoanetics/DTCoreText/blob/1.6.26/Core/Source/DTHTMLElement.m)
+explain the issue. This checks the renderer's text output locally; the user's
+iOS app must still confirm the next regular invitation. Existing posted messages
+are not edited or resent for a formatting change.
 
 The desktop layout after opening the main section is:
 
@@ -389,6 +402,21 @@ For an already-posted daily ID, menu or formatting changes will generally not
 produce another message; check the next day's entry instead.
 
 ### A scheduled invitation did not arrive
+
+On 20 October, the [11:25 run](https://github.com/maxsiska/element-feed/actions/runs/39400543814)
+uploaded its Pages artifact successfully, then failed when `deploy-pages` listed
+zero artifacts in that same run. The unchanged [11:40 retry](https://github.com/maxsiska/element-feed/actions/runs/39402401176)
+published and verified the feed at **11:40:46 Berlin**. The 11:55 run found the
+same day's invitation and skipped publication; the user confirmed room delivery.
+This points to a transient GitHub artifact-service lookup problem, rather than
+a generation, subscription, or formatting failure.
+
+The publisher now retries a failed Pages deployment **once after 15 seconds**,
+using the same uploaded artifact and daily entry ID. It rechecks the publication
+deadline before that retry. A failed retry, expired deadline, or failed public
+verification still fails the workflow; a successful retry avoids a failure
+notification for a recovered run. The separate scheduled attempts remain in
+place for longer disruptions.
 
 The reference `mensaplan2rss` checkout uses GitLab's `retry: 2`, allowing two
 retries after a job fails. This does not recover a scheduled trigger that never
